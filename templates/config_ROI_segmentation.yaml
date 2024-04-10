@@ -1,0 +1,97 @@
+---
+data:
+  raw_data_path: /path/to/parent_dir
+  processed_data_path: /path/to/destination_dir
+  extraction:
+    walk_source_dir: true
+    strictUIDs: false
+    anon: true
+    modalities:
+      - CT
+      - dose
+      - ROI:
+        - Brain
+        - Brainstem
+        - Cochlea R
+        - Cochlea L
+        - Parotid R
+        - Parotid L
+        - Submandibular R
+        - Submandibular L
+        - Larynx
+        - Brachial Plexus
+        - Spinal Cord
+    fuzzymatch_ROInames: true
+    supplemental_data: null
+
+  preprocessing:
+    static:
+      # static preprocessing occurs during data packing and is irreversible
+      pixel_size: 1
+      crop: [-1, 256, 256]
+      center_on: null
+
+    dynamic:
+      # dynamic preprocessing occurs on data load and can be changed as desired
+      window_level: [400,40]
+      ipsi_contra: null
+      modalities:
+        - CT
+      supplemental: null
+      endpoint:
+        description: autocontour
+        type: segmentation
+        classify_logic: null
+        segment_target: Parotid R
+
+  augmentation:
+    shear: 0.2
+    zoom: 0.1
+    shift: 0.15
+    rotate: 10
+    
+  runtime:
+    seed: 42
+    class_balance:
+      positive:
+        rate: 1
+      negative:
+        rate: 0.05
+    holdout: false
+    preload: true
+    stratify: false
+    kfolds: false
+    val_split: 0.15
+    test_split: 0.1
+    test_fold: null
+
+model:
+  name: unet
+  path_to_custom_model: null
+  artifact_output: /path/to/artifact_dir
+
+  build_args:
+    basefilters: 32
+    fusion: false
+    fusion_point: null
+    # input shape and output shape inferred
+    optimizer: adam
+    learning_rate: 5e-5
+    loss: bce_dice
+    metrics:
+      - dice
+
+  train_args:
+    epochs: 200
+    batch_size: 32
+    class_weight: null
+    verbose: 1
+    early_stopping: 25
+
+  evaluation:
+    binarize_threshold: 0.333
+    metrics:
+      - DSC
+      - MSD
+      - 95HD
+...

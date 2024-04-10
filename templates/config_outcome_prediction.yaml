@@ -1,0 +1,118 @@
+---
+data:
+  raw_data_path: /path/to/parent_dir
+  processed_data_path: /path/to/destination_dir
+  extraction:
+    walk_source_dir: true
+    strictUIDs: false
+    anon: true
+    modalities:
+      - CT
+      - dose
+      - ROI:
+        - GTV
+        - Parotid R
+        - Parotid L
+    fuzzymatch_ROInames: true
+    supplemental_data:
+      eortc_qol: /path/to/QOLsurvey.csv
+      clinical: /path/to/clinical_patient_db.csv
+    date_handling: relative
+    anchor_date: RT Completion Date  
+
+  preprocessing:
+    static:
+      # static preprocessing occurs during data packing and is irreversible
+      pixel_size: 2
+      crop: [90,128,128]
+      center_on: Parotid R
+      augmentation: null
+
+    dynamic:
+      # dynamic preprocessing occurs on data load and can be changed as desired
+      window_level: [400,50]
+      ipsi_contra: standardize # other options: null, duplicate
+      modalities:
+        - CT
+        - dose
+        - ROI:
+          - GTV
+      supplemental:
+        clinical:
+          - Age
+          - Marital Status
+          - Gender
+          - Height
+          - Weight
+          - T Stage Clinical
+          - N Stage
+          - Disease Site
+          - Treatment Type
+          - Unilateral or Bilateral
+          - HPV Status
+          - Alcohol Consumption
+          - Current Smoking Status
+      endpoint:
+        description: overall survival
+        type: classification # other option segmentation. regression supported soon
+        classify_logic:
+          positive:
+            clinical:
+              Date of Death: '< 730'
+          negative:
+            clinical:
+              Date of Death: null
+              Date of Last Follow Up: '>= 730'
+        segment_target: null # only used for segmentation
+    augmentation:
+      zoom: 0.2
+      rotate: 15
+      shift: 0.2
+    
+
+  runtime:
+    seed: 42
+    class_balance: false
+    holdout: false
+    preload: true
+    stratify: true
+    kfolds: 10
+    val_split: 0.1
+    test_split: null
+    test_fold: 1
+
+model:
+  name: resnet-18
+  path_to_custom_model: null
+  artifact_output: /path/to/artifact_dir
+
+  build_args:
+    basefilters: 16
+    fusion: true
+    fusion_point: early
+    # input shape and output shape inferred
+    optimizer: adam
+    learning_rate: 0.001
+    loss: binary_crossentropy
+    metrics:
+      - AUC
+      - binary_accuracy
+
+  train_args:
+    epochs: 400
+    batch_size: 16
+    class_weight:
+      0: 0.5
+      1: 1.0
+    verbose: 1
+    early_stopping: 50
+
+  evaluation:
+    binarize_threshold: 0.5
+    metrics:
+      - accuracy
+      - precision
+      - recall
+      - AUC ROC
+      - confusion matrix
+...
