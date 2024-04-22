@@ -57,4 +57,4 @@ if __name__ == '__main__':
     fp = r"F:/repos/M3CV/templates/config_outcome_prediction.yaml"
     with open(fp, 'r') as f:
         config = Config(f)
-    print(getattr(config.data.preprocessing.dynamic.endpoint.classify_logic.positive.clinical,'Date of Death'))
+    print(config.data.preprocessing.dynamic.supplemental.clinical)

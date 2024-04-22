@@ -2,6 +2,8 @@ import operator
 import numpy as np
 import pandas as pd
 
+from scipy.sparse import coo_matrix
+
 def is_valid(f, primary, supplemental):
     valid = True # assume true to start
     for x in supplemental:
@@ -70,6 +72,29 @@ def _label_logic_from_config(config,filelist,supplementals):
     labels = labels.apply(lambda x: 0 if x == -1 else x)
     return labels
     
-    
+def rebuild_sparse(slices, rows, cols, refshape):
+    dense = np.zeros(refshape)
+    slice_nums = np.unique(slices).astype(int)
+    for sl in slice_nums:
+        slice_row_positions = rows[np.where(slices==sl)]
+        slice_col_positions = cols[np.where(slices==sl)]
+        sparse = coo_matrix(
+            (np.ones_like(cols),(slice_row_positions,slice_col_positions)),
+            shape=refshape[1:],
+            dtype=int
+            )
+        dense[sl,...] = sparse.todense()
+    return dense
 
-                
+def split_list(l, seqs):
+    """Splits list l into sublists based on the fractions provided in seqs
+    """
+    results = []
+    n_seqs = [round(s*len(l)) for s in seqs]
+    for n in n_seqs:
+        results.append(l[:n])
+        l = l[n:]
+    if len(l) != 0:
+        results[-1] += l
+    
+    return results
