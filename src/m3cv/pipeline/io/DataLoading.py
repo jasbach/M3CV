@@ -7,7 +7,7 @@ import random
 
 from sklearn.preprocessing import OneHotEncoder, MinMaxScaler
 
-from m3cv.pipeline.io.data_augmentation import zoom, rotate, shift, downsample
+from m3cv.pipeline.preprocessing.data_augmentation import zoom, rotate, shift, downsample
 
 from m3cv.pipeline.io._datautils import (
     is_valid,
@@ -187,8 +187,9 @@ class DataLoader:
         return volume, nonvolume, self.labels.at[file]
 
 class Handler:
-    def __init__(self, loader: DataLoader):
+    def __init__(self, loader: DataLoader, batch_size=16):
         self.loader = loader
+        self.batch_size = batch_size
         if not hasattr(loader, 'labels'):
             loader.make_binary_labels()
         self.pos = loader.labels[loader.labels == 1].index.to_list()
@@ -196,6 +197,9 @@ class Handler:
         self.invalid = loader.labels[loader.labels == 99].index.to_list()
         self.valid = self.pos + self.neg
         self.all = self.pos + self.neg + self.invalid
+        self.preloaded = False
+
+    
 
     def set_split(
             self,
@@ -218,9 +222,112 @@ class Handler:
             merged_splits = [p + n for p,n in zip(pos_splits, neg_splits)]
             for k,l in zip(frac_map.keys(), merged_splits):
                 setattr(self,k,l)
-        
-    
+
+    def kfolds(self, seed, nfolds=10, stratified=True, testsplit=0):
+        # function to establish kfolds
+        np.random.seed(seed)
+        if not stratified:
+            np.random.shuffle(self.valid)
+            self.splits = np.array_split(self.valid, nfolds)
+        else:
+            np.random.shuffle(self.pos)
+            np.random.shuffle(self.neg)
+            pos_splits = np.array_split(self.pos, nfolds)
+            neg_splits = np.array_split(self.neg, nfolds)
+            self.splits = [
+                np.concatenate([p,n],axis=0) 
+                for p,n in zip(pos_splits, neg_splits)
+                ]
+        self.set_test_split(testsplit)
             
+    def set_test_split(self, testsplit):
+        # used to change which split is the test split. takes int arg
+        self.test = self.splits[testsplit]
+        self.train = [
+            self.splits[i] for i in range(len(self.splits)) if i != testsplit
+            ]
+        self.train = np.concatenate(self.train, axis=0)
+            
+    @property
+    def train_ceiling(self):
+        """
+        The tf.Dataset from generator structure doesn't play nice with leftover
+        partial batches at the end of epochs, so this value is used to get a
+        clean ceiling that ensures complete batches. Obviously this leaves
+        some remainder of patients out of any given epoch, however, since the
+        generator shuffles the list at each reset, over multiple epochs every
+        data element is expected to be included at some point.
+
+        Cannot be called until splits are defined.
+        """
+        if self.batch_size is None:
+            c = len(self.train)
+        else:
+            c = len(self.train) - (len(self.train) % self.batch_size)
+        if self.flip_double is True:
+            c *= 2
+        return c
+            
+    def preload(self):
+        # attempts to preload data, assuming there's sufficient memory space
+        for x in ['trXv', 'trXnv', 'trY', 'teXv', 'teXnv', 'teY']:
+            setattr(self, x, [])
+        for pt in self.train:
+            v, nv, y = self.loader.load_patient(pt)
+            self.trXv.append(v)
+            self.trXnv.append(nv)
+            self.trY.append(y)
+        self.trXv = np.stack(self.trXv, axis=0)
+        self.trXnv = np.stack(self.trXnv, axis=0)
+        self.trY = np.stack(self.trY, axis=0)
+        self.train_map = {
+            pt:i for pt, i in zip(
+                self.train,np.arange(len(self.train))
+                )
+            }
+
+        for pt in self.test:
+            v, nv, y = self.loader.load_patient(pt)
+            self.teXv.append(v)
+            self.teXnv.append(nv)
+            self.teY.append(y)
+        self.teXv = np.stack(self.teXv, axis=0)
+        self.teXnv = np.stack(self.teXnv, axis=0)
+        self.teY = np.stack(self.teY, axis=0)
+        self.test_map = {
+            pt:i for pt, i in zip(
+                self.test,np.arange(len(self.test))
+                )
+            }
+
+        self.preloaded = True
+
+    def __call__(self):
+        """call_reference is a list of indices that map to the fixed-order
+        of the train patient list and, if applicable, preloaded data. This 
+        way we can simply shuffle the reference, without needing to perform
+        synchronized shuffling of multiple other arrays.
+        """
+        self.call_index = 0
+        self.call_reference = np.arange(len(self.train))
+        np.random.shuffle(self.call_reference)
+        while True:
+            if self.call_index >= self.train_ceiling:
+                self.call_index = 0
+                np.random.shuffle(self.call_reference)
+            pt = self.train[self.call_reference[self.call_index]]
+
+            if self.preloaded:
+                v = self.trXv[self.train_map[pt],...]
+                nv = self.trXnv[self.train_map[pt],...]
+                y = self.trY[self.train_map[pt],...]
+            else:
+                v, nv, v = self.loader(pt)
+
+            if hasattr(self, 'augmenter'):
+                v = self.augmenter(v) #TODO - build augmenter
+            yield (v, nv), y
+            self.call_index += 1
 
 def encoder(data):
     try:
