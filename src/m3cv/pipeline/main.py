@@ -1,6 +1,8 @@
 import os
+import pandas as pd
 import tensorflow as tf
 import keras
+import json
 
 from argparse import ArgumentParser
 
@@ -8,6 +10,7 @@ from m3cv.ConfigHandler import Config
 from m3cv.pipeline.io import DataLoader, Handler
 from m3cv.models.Resnet import Resnet3DBuilder
 from m3cv.models.ViT import ViTBuilder
+from m3cv.pipeline.evaluation.reports import classification_report
 
 """Script that houses primary entry point for model training runs.
 """
@@ -132,6 +135,34 @@ def run(args):
         }
     # === Run model ===
     history = model.fit(**fitargs)
+    pd.DataFrame(data=history.history).to_csv(
+        os.path.join(config.model.artifact_output,"history.csv")
+        )   
+    model.save(
+        os.path.join(config.model.artifact_output,"full_final_model.h5")
+        )
+
+
+    testXvol, testXnonvol, testY = handler.bulk_load(handler.test)
+    preds = model.predict((testXvol, testXnonvol))
+    results = {
+    'patients' : gen.test,
+    'true' : np.squeeze(testY),
+    'preds' : np.squeeze(preds)
+    }
+    pd.DataFrame(data=results).to_csv(
+        os.path.join(config.model.artifact_output,"results.csv")
+        )
+
+    report = classification_report(
+        config.model.evaluation, testY, preds
+    )
+    print(report)
+    with open(
+        os.path.join(config.model.artifact_output,'report.json'), 'w+'
+        ) as f:
+        json.dump(report, f)
+
 
 if __name__ == '__main__':
     run([r'F:\repos\M3CV\src\m3cv\templates\config_test.yaml'])
