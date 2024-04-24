@@ -11,6 +11,8 @@ import cv2
 import numpy as np
 import scipy.ndimage.interpolation as scipy_mods
 
+# TODO - make each function flexible for 2D or 3D augmentation
+
 def rotate(original, degree_range=15, seed=None, degrees=None):
     """
     Function to rotate 3D array about the Z axis

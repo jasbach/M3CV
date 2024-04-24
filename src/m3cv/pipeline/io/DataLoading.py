@@ -26,7 +26,7 @@ class DataLoader:
             file for file in os.listdir(self.root) if file.endswith('.h5')
             ]
         self.scouted = False
-        supp = self.config.data.extraction.supplemental_data.scan()
+        supp = self.config.data.preprocessing.dynamic.supplemental.scan()
         self.primary = self.config.data.preprocessing.dynamic.modalities
         self.supp = {k:pd.DataFrame() for k in supp}
         self.active_fields = {
@@ -45,6 +45,8 @@ class DataLoader:
         one_tenth = len(self.files) // 10
         for i,file in enumerate(self.files[:]):
             with h5py.File(os.path.join(self.root, file),'r') as f:
+                if not hasattr(self, 'volshape'):
+                    self.volshape = f.attrs['shape']
                 # check validity
                 if not is_valid(f, self.primary, list(self.supp.keys())):
                     print(f"{file} missing required contents, skipping...")
@@ -95,6 +97,29 @@ class DataLoader:
                 self.encoders[k][v] = encoder(
                     self.supp[k][v]
                 )
+    
+    @property
+    def output_sig(self):
+        """
+        When instantiating a tf.Dataset from a generator, it needs to know the
+        output signature. This is a quick utility function that constructs
+        that signature in appropriate TensorSpec format based on how the
+        instance is configured.
+        """
+        import tensorflow as tf
+        # it's bad form, but tucking this import into the function call allows
+        # me to use this class in non-TF environments
+
+        basesig = tf.TensorSpec((self.volshape),dtype=tf.float32)        
+        support_length = self.supp_vector_len
+        if support_length > 0:
+            supportsig = tf.TensorSpec((support_length,),dtype=tf.float32)
+        else:
+            supportsig = None
+        
+        x_sigs = (basesig, supportsig) if supportsig is not None else basesig
+        y_sig = tf.TensorSpec(shape=(),dtype=tf.int32)
+        return (x_sigs, y_sig)
 
     @property
     def supp_vector_len(self):
@@ -199,11 +224,13 @@ class Handler:
         self.all = self.pos + self.neg + self.invalid
         self.preloaded = False
 
-    
+    @property
+    def supp_vector_len(self):
+        return self.loader.supp_vector_len
 
     def set_split(
             self,
-            frac_map={'train':0.9,'test':0.1},
+            frac_map={'train':0.81,'val':0.09,'test':0.1},
             stratified=True,
             seed=None
             ):
@@ -238,13 +265,16 @@ class Handler:
                 np.concatenate([p,n],axis=0) 
                 for p,n in zip(pos_splits, neg_splits)
                 ]
-        self.set_test_split(testsplit)
+        self.assign_split(testidx=testsplit,validx=testsplit+1)
             
-    def set_test_split(self, testsplit):
+    def set_test_split(self, testidx, validx=None):
         # used to change which split is the test split. takes int arg
-        self.test = self.splits[testsplit]
+        self.test = self.splits[testidx]
+        if validx is not None:
+            self.val = self.splits[validx]
         self.train = [
-            self.splits[i] for i in range(len(self.splits)) if i != testsplit
+            self.splits[i] for i in range(len(self.splits)) \
+                if all((i != testidx, i != validx))
             ]
         self.train = np.concatenate(self.train, axis=0)
             
@@ -267,39 +297,68 @@ class Handler:
         if self.flip_double is True:
             c *= 2
         return c
+    
+    @property
+    def train_map(self):
+        if not hasattr(self, 'train'):
+            return None
+        else:
+            pt_map = {
+                pt:i for pt, i in zip(
+                    self.train,np.arange(len(self.train))
+                    )
+                }
+            return pt_map
+        
+    @property
+    def val_map(self):
+        if not hasattr(self, 'val'):
+            return None
+        else:
+            pt_map = {
+                pt:i for pt, i in zip(
+                    self.val,np.arange(len(self.val))
+                    )
+                }
+            return pt_map
+        
+    @property
+    def test_map(self):
+        if not hasattr(self, 'test'):
+            return None
+        else:
+            pt_map = {
+                pt:i for pt, i in zip(
+                    self.test,np.arange(len(self.test))
+                    )
+                }
+            return pt_map
+    
+    def bulk_load(self, pt_list):
+        vol = []
+        nonvol = []
+        lbl = []
+        for pt in pt_list:
+            v, nv, y = self.loader.load_patient(pt)
+            vol.append(v)
+            nonvol.append(vn)
+            lbl.append(y)
+        vol = np.stack(vol, axis=0)
+        nonvol = np.stack(nonvol, axis=0)
+        lbl = np.stack(lbl, axis=0)
+        return vol, nonvol, lbl
             
     def preload(self):
         # attempts to preload data, assuming there's sufficient memory space
-        for x in ['trXv', 'trXnv', 'trY', 'teXv', 'teXnv', 'teY']:
-            setattr(self, x, [])
-        for pt in self.train:
-            v, nv, y = self.loader.load_patient(pt)
-            self.trXv.append(v)
-            self.trXnv.append(nv)
-            self.trY.append(y)
-        self.trXv = np.stack(self.trXv, axis=0)
-        self.trXnv = np.stack(self.trXnv, axis=0)
-        self.trY = np.stack(self.trY, axis=0)
-        self.train_map = {
-            pt:i for pt, i in zip(
-                self.train,np.arange(len(self.train))
-                )
-            }
-
-        for pt in self.test:
-            v, nv, y = self.loader.load_patient(pt)
-            self.teXv.append(v)
-            self.teXnv.append(nv)
-            self.teY.append(y)
-        self.teXv = np.stack(self.teXv, axis=0)
-        self.teXnv = np.stack(self.teXnv, axis=0)
-        self.teY = np.stack(self.teY, axis=0)
-        self.test_map = {
-            pt:i for pt, i in zip(
-                self.test,np.arange(len(self.test))
-                )
-            }
-
+        v, nv, l = self.bulk_load(self.train)
+        self.trXv = v
+        self.trXnv = nv
+        self.trY = l
+        if hasattr(self, 'val'):
+            v, nv, l = self.bulk_load(self.val)
+            self.vXv = v
+            self.vXnv = nv
+            self.vY = l
         self.preloaded = True
 
     def __call__(self):
@@ -322,12 +381,51 @@ class Handler:
                 nv = self.trXnv[self.train_map[pt],...]
                 y = self.trY[self.train_map[pt],...]
             else:
-                v, nv, v = self.loader(pt)
+                v, nv, v = self.loader.load_patient(pt)
 
             if hasattr(self, 'augmenter'):
                 v = self.augmenter(v) #TODO - build augmenter
             yield (v, nv), y
             self.call_index += 1
+
+class Augmenter:
+    def __init__(self, scheme, rate=0.6667, n_augments=1):
+        """Arguments
+        ------------
+        scheme : dict
+            Dictionary of op:limit which defines bounds for augment severity.
+        rate : float
+            Between 0.0 and 1.0, likelihood of performing augmentation on call.
+        n_augments : int
+            If activated for augment, how many augments to apply. Default is 1. 
+        """
+        self.aug_chance = rate
+        self.n_augments = n_augments
+        for op, limit in scheme.items():
+            setattr(self,f"{op}_limit",limit)
+        self.active_augments = list(scheme.keys())
+    
+    def __call__(self, v):
+        proc = np.random.random()
+        if proc > self.aug_chance:
+            # no augments procced, return original input
+            return v
+        unused_ops = [op for op in self.active_augments]
+        for _ in range(self.n_augments):
+            select = np.random.choice(np.arange(len(unused_ops)))
+            active_op = unused_ops.pop(select)
+            if active_op == 'zoom':
+                v = zoom(v, max_zoom_factor=self.zoom_limit)
+            elif active_op == 'shift':
+                v = shift(v, max_shift=self.shift_limit)
+            elif active_op == 'rotate':
+                v = rotate(v, degree_range=self.rotate_limit)
+            # TODO - add support for shear operation
+            else:
+                raise Exception("Unrecognized augment op in scheme")
+        return v
+
+        
 
 def encoder(data):
     try:
