@@ -12,9 +12,6 @@ def is_valid(f, primary, supplemental):
             break
     for x in primary:
         if isinstance(x, dict):
-            if k not in f.keys():
-                valid = False
-                break
             for k,v in x.items():
                 # occurs for ROI storage - v will be list of ROIs
                 check = f[k]
@@ -45,25 +42,37 @@ def create_comparison_function(operator_str):
 def _label_logic_from_config(config,filelist,supplementals):
     # TODO - test this haha, it's complicated
     logic = config.data.preprocessing.dynamic.endpoint.classify_logic
-    neg_labels = pd.Series(index=filelist, data=False)
-    pos_labels = pd.Series(index=filelist,data=False)
+    neg_labels = pd.Series(index=filelist, data=False,name='neg_labels')
+    pos_labels = pd.Series(index=filelist,data=False, name='pos_labels')
     neg = logic.negative
     pos = logic.positive
-    for cat, holder in zip([neg, pos], [neg_labels,pos_labels]):
+    for i, cat in enumerate([neg, pos]):
+        if i == 0:
+            holder = neg_labels
+        elif i == 1:
+            holder = pos_labels
         for s in cat.scan():
             data = supplementals[s]
-            subgroup = getattr(neg, s)
+            subgroup = getattr(cat, s)
             fields = subgroup.scan()
             for field in fields:
                 rule = getattr(subgroup, field)
-                operator, value = rule.split(" ")
-                value = float(value)
-                comp_func = create_comparison_function(operator)
-                rule_eval = data[field].apply(
-                    lambda x: comp_func(x,value)
-                    )
+                if isinstance(rule, str):
+                    operator, value = rule.split(" ")
+                    value = float(value)
+                    comp_func = create_comparison_function(operator)
+                    rule_eval = data.loc[filelist][field.strip().lower()].astype(float).apply(
+                        lambda x: comp_func(x,value)
+                        )
+                elif rule is None:
+                    rule_eval = data[field].isna()
+
                 holder = holder|rule_eval
-    
+        if i == 0:
+            neg_labels = holder
+        elif i == 1:
+            pos_labels = holder
+
     neg_labels = neg_labels * -1
     pos_labels = pos_labels * 1
     labels = neg_labels + pos_labels
@@ -79,7 +88,8 @@ def rebuild_sparse(slices, rows, cols, refshape):
         slice_row_positions = rows[np.where(slices==sl)]
         slice_col_positions = cols[np.where(slices==sl)]
         sparse = coo_matrix(
-            (np.ones_like(cols),(slice_row_positions,slice_col_positions)),
+            (np.ones_like(slice_col_positions),
+             (slice_row_positions,slice_col_positions)),
             shape=refshape[1:],
             dtype=int
             )

@@ -1,19 +1,19 @@
 ---
 data:
   raw_data_path: /path/to/parent_dir
-  processed_data_path: /path/to/destination_dir
+  processed_data_path: D://m3cv_testfolder//data
   extraction:
     walk_source_dir: true
     strictUIDs: false
     anon: true
     modalities:
-      - CT
+      - ct
       - dose
-      - ROI:
-        - GTV
-        - Parotid R
-        - Parotid L
-    fuzzymatch_ROInames: true
+      - roi:
+        - ptv
+        - parotid_r
+        - parotid_l
+    fuzzymatch_ROInames: False
     supplemental_data:
       eortc_qol: /path/to/QOLsurvey.csv
       clinical: /path/to/clinical_patient_db.csv
@@ -25,7 +25,7 @@ data:
       # static preprocessing occurs during data packing and is irreversible
       pixel_size: 2
       crop: [90,128,128]
-      center_on: Parotid R
+      center_on: parotid_r
       augmentation: null
 
     dynamic:
@@ -33,25 +33,25 @@ data:
       window_level: [400,50]
       ipsi_contra: standardize # other options: null, duplicate
       modalities:
-        - CT
+        - ct
         - dose
-        - ROI:
-          - GTV
+        - roi:
+          - ptv
       supplemental:
         clinical:
-          - Age
-          - Marital Status
-          - Gender
-          - Height
-          - Weight
-          - T Stage Clinical
-          - N Stage
-          - Disease Site
-          - Treatment Type
-          - Unilateral or Bilateral
-          - HPV Status
-          - Alcohol Consumption
-          - Current Smoking Status
+          - age at diagnosis
+          - marital status
+          - gender
+          - height (cm)
+          - weight (kg)
+          - t stage clinical
+          - n stage
+          - disease site
+          - treatment type
+          - unlilateral or bilateral
+          - hpv status
+          - alcohol consumption
+          - currently smoke
       endpoint:
         description: overall survival
         type: classification # other option segmentation. regression supported soon
@@ -61,8 +61,7 @@ data:
               Date of Death: '< 730'
           negative:
             clinical:
-              Date of Death: null
-              Date of Last Follow Up: '>= 730'
+              Date of Last Follow Up: '>= 730' # Date of Death: null
         segment_target: null # only used for segmentation
     augmentation:
       zoom: 0.2
@@ -74,7 +73,7 @@ data:
     seed: 42
     class_balance: false
     holdout: false
-    preload: true
+    preload: false
     stratify: true
     kfolds: 10
     val_split: 0.1
@@ -84,7 +83,7 @@ data:
 model:
   name: resnet-18
   path_to_custom_model: null
-  artifact_output: /path/to/artifact_dir
+  artifact_output: D://m3cv_testfolder//artifacts
 
   build_args:
     basefilters: 16
@@ -99,8 +98,8 @@ model:
       - binary_accuracy
 
   train_args:
-    epochs: 400
-    batch_size: 16
+    epochs: 10
+    batch_size: 4
     class_weight:
       0: 0.5
       1: 1.0

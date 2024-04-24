@@ -1,5 +1,6 @@
 import os
 import pandas as pd
+import numpy as np
 import tensorflow as tf
 import keras
 import json
@@ -7,7 +8,7 @@ import json
 from argparse import ArgumentParser
 
 from m3cv.ConfigHandler import Config
-from m3cv.pipeline.io import DataLoader, Handler
+from m3cv.pipeline.io import DataLoader, Handler, Augmenter
 from m3cv.models.Resnet import Resnet3DBuilder
 from m3cv.models.ViT import ViTBuilder
 from m3cv.pipeline.evaluation.reports import classification_report
@@ -15,17 +16,26 @@ from m3cv.pipeline.evaluation.reports import classification_report
 """Script that houses primary entry point for model training runs.
 """
 
-def run(args):
+def run(args=None):
     # === Load configuration file ===
+    print(
+"""==== Welcome to the M3CV deep learning pipeline ===
+<Initializing pipeline, loading config...>
+"""
+    )
     parser = ArgumentParser()
     parser.add_argument('configpath')
-    args = parser.parse_args(args)
+    if args is not None:
+        args = parser.parse_args(args)
+    else:
+        args = parser.parse_args()
     with open(args.configpath, 'r') as f:
         config = Config(f)
     # === Instantiate data loader off config ===
     loader = DataLoader(config)
     loader.scout_files(verbose=True)
     # === Configure data loader ===
+    print("<Configuring endpoint...>")
     problem_type = config.data.preprocessing.dynamic.endpoint.type
     if problem_type == 'classification':
         loader.make_binary_labels()
@@ -33,11 +43,19 @@ def run(args):
         raise Exception("Segmentation support coming soon")
     else:
         raise Exception("Unrecognized problem type.")
+    print("<Building encoders...>")
     loader.build_encoders()
     # === Wrap data loader in handler ===
     batch_size = config.model.train_args.batch_size
     handler = Handler(loader, batch_size=batch_size)
+    # === Set up data augmentation profile ===
+    augment_scheme = config.data.preprocessing.augmentation
+    augment_scheme = {op:getattr(augment_scheme,op) \
+                      for op in augment_scheme.scan()}
+    augmenter = Augmenter(augment_scheme)
+    handler.augmenter = augmenter
     # === Set up splits ===
+    print("<Arranging data splits...>")
     splits_config = config.data.runtime
     handler.kfolds(
         seed=splits_config.seed,
@@ -45,7 +63,9 @@ def run(args):
         testsplit=splits_config.test_fold
     )
     if splits_config.preload:
+        print("<Preloading - this may take some time...>")
         handler.preload()
+    valXvol, valXnonvol, valY = handler.bulk_load(handler.test)
     # === Set up tf.Dataset for training data ===
     train_dataset = tf.data.Dataset.from_generator(
     handler,
@@ -55,23 +75,29 @@ def run(args):
     # === Build model ===
     build_args = config.model.build_args
     if build_args.fusion is True:
+        if build_args.fusion_point == 'early':
+            fusepoint = 0
+        elif build_args.fusion_point == 'late':
+            fusepoint = 'late'
         fusion_plan = {
-            build_args.fusion_point:handler.supp_vector_len
+            fusepoint:handler.supp_vector_len
             }
     else:
         fusion_plan = {}
 
-    inputshape = handler.loader.volshape
-    if args.model.lower() == 'resnet-34':
+    inputshape = tuple([dim for dim in handler.loader.volshape] + [3]) 
+    # infer number of channels
+    if config.model.name == 'resnet-34':
         builder = Resnet3DBuilder.build_resnet_34
-    elif args.model.lower() == 'resnet-18':
+    elif config.model.name == 'resnet-18':
         builder = Resnet3DBuilder.build_resnet_18
-    elif args.model.lower() == 'vit':
+    elif config.model.name == 'vit':
         builder = ViTBuilder
     else:
         raise Exception(
             "Unrecognized model argument, defaulting to ResNet-18"
             )
+    print("<Building neural network...>")
     model = builder(
         inputshape,
         num_outputs=1,
@@ -123,7 +149,7 @@ def run(args):
     # === Configure run settings ===
     fitargs = {
         'x':train_dataset,
-        'validation_data':((handler.vXv, handler.vXnv), handler.vY),
+        'validation_data':((valXvol, valXnonvol), valY),
         'steps_per_epoch':(len(handler.train) // batch_size),
         'epochs': train_args.epochs,
         'callbacks':[checkpoint, earlystopping],
@@ -134,19 +160,22 @@ def run(args):
             }
         }
     # === Run model ===
-    history = model.fit(**fitargs)
-    pd.DataFrame(data=history.history).to_csv(
-        os.path.join(config.model.artifact_output,"history.csv")
-        )   
-    model.save(
-        os.path.join(config.model.artifact_output,"full_final_model.h5")
-        )
+    print("<Beginning training...>")
+    with tf.device('/CPU:0'):
+        history = model.fit(**fitargs)
+        pd.DataFrame(data=history.history).to_csv(
+            os.path.join(config.model.artifact_output,"history.csv")
+            )   
+        model.save(
+            os.path.join(config.model.artifact_output,"full_final_model.h5")
+            )
 
-
-    testXvol, testXnonvol, testY = handler.bulk_load(handler.test)
-    preds = model.predict((testXvol, testXnonvol))
+        print("<Loading test data, this may take a moment...>")
+        testXvol, testXnonvol, testY = handler.bulk_load(handler.test)
+        print("<Running evals...>")
+        preds = model.predict((testXvol, testXnonvol))
     results = {
-    'patients' : gen.test,
+    'patients' : handler.test,
     'true' : np.squeeze(testY),
     'preds' : np.squeeze(preds)
     }
@@ -162,7 +191,7 @@ def run(args):
         os.path.join(config.model.artifact_output,'report.json'), 'w+'
         ) as f:
         json.dump(report, f)
-
+    print("<Pipeline complete.>")
 
 if __name__ == '__main__':
-    run([r'F:\repos\M3CV\src\m3cv\templates\config_test.yaml'])
+    run([r'F:\repos\M3CV\templates\config_test.yaml'])

@@ -54,8 +54,10 @@ class DataLoader:
                     continue
 
                 for s in self.supp.keys():
+                    fields = f[s].attrs['fields'].astype(str)
+                    fields = [field.strip().lower() for field in fields]
                     temp = pd.DataFrame(
-                        columns=f[s].attrs['fields'].astype(str),
+                        columns=fields,
                         index=[file],
                         data=f[s][...].astype(str).reshape(1,-1)
                         )
@@ -110,7 +112,7 @@ class DataLoader:
         # it's bad form, but tucking this import into the function call allows
         # me to use this class in non-TF environments
 
-        basesig = tf.TensorSpec((self.volshape),dtype=tf.float32)        
+        basesig = tf.TensorSpec((*self.volshape, 3),dtype=tf.float32)        
         support_length = self.supp_vector_len
         if support_length > 0:
             supportsig = tf.TensorSpec((support_length,),dtype=tf.float32)
@@ -164,25 +166,29 @@ class DataLoader:
             refshape = f.attrs['shape']
             for channel in self.config.data.preprocessing.dynamic.modalities:
                 if isinstance(channel, dict):
-                    for mask in channel['ROI']:
+                    for mask in channel['roi']:
                         volumes.append(rebuild_sparse(
-                            f[channel][mask]['slices'],
-                            f[channel][mask]['rows'],
-                            f[channel][mask]['cols'],
+                            f['roi'][mask]['slices'][:],
+                            f['roi'][mask]['rows'][:],
+                            f['roi'][mask]['cols'][:],
                             refshape
                         ))
-                if isinstance(f[channel], h5py.Dataset):
+                else:
                     volumes.append(f[channel][...])
-                elif isinstance(f[channel], h5py.Group):
-                    volumes.append()
+        
             volume = np.stack(volumes, axis=-1)
 
             nonvolume = []
             for k,values in self.active_fields.items():
                 for v in values:
                     fieldmap = f[k].attrs['fields'].astype(str)
+                    fieldmap = np.array([s.strip().lower() for s in fieldmap])
                     entry = f[k][np.where(fieldmap==v)].astype(str)
-                    entries = entry[0].split("|") # hardcoded delimiter
+                    try:
+                        entries = entry[0].split("|") # hardcoded delimiter
+                    except:
+                        print(k,v,entry)
+                        raise
                     entries = [e if e != 'inf' else 'nan' for e in entries]
                     conversion = True if isinstance(
                         self.encoders[k][v], MinMaxScaler
@@ -206,7 +212,7 @@ class DataLoader:
                 nonvolume = np.array(nonvolume)
             else:
                 nonvolume = np.concatenate(nonvolume, axis=1)
-            nonvolume = np.squeeze(nonvolume)
+            nonvolume = np.squeeze(np.array(nonvolume))
             nonvolume[np.isnan(nonvolume)] = 0
 
         return volume, nonvolume, self.labels.at[file]
@@ -265,9 +271,9 @@ class Handler:
                 np.concatenate([p,n],axis=0) 
                 for p,n in zip(pos_splits, neg_splits)
                 ]
-        self.assign_split(testidx=testsplit,validx=testsplit+1)
+        self.assign_test_split(testidx=testsplit,validx=testsplit+1)
             
-    def set_test_split(self, testidx, validx=None):
+    def assign_test_split(self, testidx, validx=None):
         # used to change which split is the test split. takes int arg
         self.test = self.splits[testidx]
         if validx is not None:
@@ -294,8 +300,6 @@ class Handler:
             c = len(self.train)
         else:
             c = len(self.train) - (len(self.train) % self.batch_size)
-        if self.flip_double is True:
-            c *= 2
         return c
     
     @property
@@ -335,14 +339,16 @@ class Handler:
             return pt_map
     
     def bulk_load(self, pt_list):
+        print("Number of patients to load:", len(pt_list))
         vol = []
         nonvol = []
         lbl = []
         for pt in pt_list:
             v, nv, y = self.loader.load_patient(pt)
             vol.append(v)
-            nonvol.append(vn)
+            nonvol.append(nv)
             lbl.append(y)
+        print(len(vol))
         vol = np.stack(vol, axis=0)
         nonvol = np.stack(nonvol, axis=0)
         lbl = np.stack(lbl, axis=0)
@@ -354,11 +360,6 @@ class Handler:
         self.trXv = v
         self.trXnv = nv
         self.trY = l
-        if hasattr(self, 'val'):
-            v, nv, l = self.bulk_load(self.val)
-            self.vXv = v
-            self.vXnv = nv
-            self.vY = l
         self.preloaded = True
 
     def __call__(self):
@@ -381,10 +382,10 @@ class Handler:
                 nv = self.trXnv[self.train_map[pt],...]
                 y = self.trY[self.train_map[pt],...]
             else:
-                v, nv, v = self.loader.load_patient(pt)
+                v, nv, y = self.loader.load_patient(pt)
 
             if hasattr(self, 'augmenter'):
-                v = self.augmenter(v) #TODO - build augmenter
+                v = self.augmenter(v)
             yield (v, nv), y
             self.call_index += 1
 
