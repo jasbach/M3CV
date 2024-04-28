@@ -57,4 +57,4 @@ if __name__ == '__main__':
     fp = r"F:/repos/M3CV/templates/config_outcome_prediction.yaml"
     with open(fp, 'r') as f:
         config = Config(f)
-    print(config.data.preprocessing.augmentation.rotate)
+    print(config.data.extraction.supplemental_data.scan())

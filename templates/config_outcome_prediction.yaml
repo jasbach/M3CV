@@ -10,7 +10,7 @@ data:
       - CT
       - dose
       - ROI:
-        - GTV
+        - PTV
         - Parotid R
         - Parotid L
     fuzzymatch_ROInames: true
@@ -25,7 +25,7 @@ data:
       # static preprocessing occurs during data packing and is irreversible
       pixel_size: 2
       crop: [90,128,128]
-      center_on: Parotid R
+      center_on: parotid_r
       augmentation: null
 
     dynamic:
