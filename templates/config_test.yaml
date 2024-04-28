@@ -98,7 +98,7 @@ model:
       - binary_accuracy
 
   train_args:
-    epochs: 10
+    epochs: 5
     batch_size: 4
     class_weight:
       0: 0.5

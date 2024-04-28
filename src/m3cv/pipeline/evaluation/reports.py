@@ -22,8 +22,8 @@ def classification_report(eval_config, true, preds):
             report['AUC ROC'] = roc_auc_score(true, preds)
         elif metric == 'confusion matrix':
             tn, fp, fn, tp = confusion_matrix(true, bin_preds).ravel()
-            report['tn'] = tn
-            report['fp'] = fp
-            report['fn'] = fn
-            report['tp'] = tp
+            report['tn'] = int(tn)
+            report['fp'] = int(fp)
+            report['fn'] = int(fn)
+            report['tp'] = int(tp)
     return report

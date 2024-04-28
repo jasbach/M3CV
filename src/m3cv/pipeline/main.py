@@ -6,6 +6,8 @@ import keras
 import json
 
 from argparse import ArgumentParser
+import warnings
+warnings.simplefilter(action='ignore', category=FutureWarning)
 
 from m3cv.ConfigHandler import Config
 from m3cv.pipeline.io import DataLoader, Handler, Augmenter
