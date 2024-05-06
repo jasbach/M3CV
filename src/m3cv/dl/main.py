@@ -10,10 +10,10 @@ import warnings
 warnings.simplefilter(action='ignore', category=FutureWarning)
 
 from m3cv.ConfigHandler import Config
-from m3cv.pipeline.io import DataLoader, Handler, Augmenter
+from m3cv.dl.io import DataLoader, Handler, Augmenter
 from m3cv.models.Resnet import Resnet3DBuilder
 from m3cv.models.ViT import ViTBuilder
-from m3cv.pipeline.evaluation.reports import classification_report
+from m3cv.dl.evaluation.reports import classification_report
 
 """Script that houses primary entry point for model training runs.
 """

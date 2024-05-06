@@ -7,9 +7,9 @@ import random
 
 from sklearn.preprocessing import OneHotEncoder, MinMaxScaler
 
-from m3cv.pipeline.preprocessing.data_augmentation import zoom, rotate, shift, downsample
+from m3cv.dl.preprocessing.data_augmentation import zoom, rotate, shift, downsample
 
-from m3cv.pipeline.io._datautils import (
+from m3cv.dl.io._datautils import (
     is_valid,
     _label_logic_from_config,
     rebuild_sparse,
