@@ -1,9 +1,9 @@
 from argparse import ArgumentParser
 from m3cv.ConfigHandler import Config
 
-from m3cv.data.handler import Preprocessor
-import m3cv.data.arrayclasses as arrayclass
-from m3cv.data._preprocess_util import find_parotid_info, find_PTV_info
+from m3cv.dataprep.handler import Preprocessor
+import m3cv.dataprep.arrayclasses as arrayclass
+from m3cv.dataprep._preprocess_util import find_parotid_info, find_PTV_info
 
 import os
 import pandas as pd
