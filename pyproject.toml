@@ -1,40 +1,22 @@
-[build-system]
-requires = ["poetry-core"]
-build-backend = "poetry.core.masonry.api"
-
-[tool.poetry]
+[project]
 name = "m3cv"
 version = "0.1.0"
-authors = ["John Asbach <johnasba@buffalo.edu>"]
-description = "Framework for multimodal deep learning in medical domain"
-homepage = "https://github.com/jasbach/M3CV"
-license = "GPL-3.0-or-later"
+description = "Software package for data handling and model construction for multimodal computer vision deep learning using medical data."
+authors = [
+    {name = "John Asbach"}
+]
+license = {text = "MIT"}
 readme = "README.md"
-repository = "https://github.com/jasbach/M3CV"
-classifiers = [
-    "Programming Language :: Python :: 3",
-    "License :: GNU GPL",
-    "Operating System :: OS Independent"
+requires-python = ">=3.10"
+dependencies = [
+    "tensorflow (==2.17)",
+    "keras (>=3.8.0,<4.0.0)",
+    "h5py (>=3.12.1,<4.0.0)",
+    "pandas (>=2.2.3,<3.0.0)",
+    "pydicom (>=3.0.1,<4.0.0)"
 ]
 
-[tool.poetry.dependencies]
-python = ">=3.9,<3.12"
-keras = "*"
-tensorflow = "2.10.0"
-h5py = "^3.1.0"
-numpy = "^1.19.0"
-pandas = "^2.1.4"
-protobuf = ">=3.9.2"
-pydicom = "^2.3.0"
-pyyaml = "*"
-scikit-learn = "^1.2.2"
-scipy = "^1.11.4"
 
-[tool.poetry.scripts]
-m3cv-dataprep = 'm3cv.data.main:run'
-m3cv-train = 'm3cv.pipeline.main:run'
-
-[[tool.poetry.source]]
-name = "gitlab"
-url = "https://gitlab.com/api/v4/projects/36861665/packages/pypi"
-priority = "supplemental"
+[build-system]
+requires = ["poetry-core>=2.0.0,<3.0.0"]
+build-backend = "poetry.core.masonry.api"
