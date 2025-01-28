@@ -209,3 +209,16 @@ def pack_mask(densemask):
         col = np.concatenate([col,sp.col])
         row = np.concatenate([row,sp.row])    
     return slic, row, col
+
+def window_level(array, window, level, normalize=False):
+    upper = level + round(window/2)
+    lower = level - round(window/2)
+    
+    array[array > upper] = upper
+    array[array < lower] = lower
+    
+    if normalize:
+        # min-max standardization, puts all values between 0.0 and 1.0
+        array -= lower
+        array = array / window
+    return array

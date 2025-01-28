@@ -333,33 +333,40 @@ class PatientCT(PatientArray):
         Array is stored as (Z, Y, X)
         """
         self.voidval = -1000
-        #self.studyUID = filelist[0].StudyInstanceUID
-        #self.FoR = filelist[0].FrameOfReferenceUID
-        #self.pixel_size = filelist[0].PixelSpacing
         super().__init__(filelist[0])
         self.slice_thickness = filelist[0].SliceThickness
         refrows = filelist[0].Rows
         refcols = filelist[0].Columns
         zlist = []
+        enforcement = [
+            "StudyInstanceUID", 
+            "FrameOfReferenceUID", 
+            "PixelSpacing", 
+            "SliceThickness"
+        ]
+        
+        # not the most efficient, nested loops, but reads cleaner
+        for dicom_attr in enforcement:
+            unique = set([getattr(file, dicom_attr) for file in filelist])
+            assert len(unique) == 1, \
+                f"Incompatible metadata in CT files for {dicom_attr}"
+                # TODO - diagnostics, better error messaging to let user know which file is bad
+
+        """We probably want to change this and move the actual array building to outside of the init.
+        There are a lot of ways this could fail that would simply prevent the PatientCT object from being
+        created, whereas if we make the init lightweight we could add diagnostics onto the class itself
+        and let us filter out problematic files.
+        """
+
         for file in filelist:
-            if not all((
-                    file.StudyInstanceUID == self.studyUID,
-                    file.FrameOfReferenceUID == self.FoR,
-                    file.PixelSpacing == self.pixel_size,
-                    file.SliceThickness == self.slice_thickness,
-                    file.Rows == refrows,
-                    file.Columns == refcols
-                    )):
-                raise ValueError(
-                    "Incompatible metadata in file list"
-                    )
+            # build zlist: tuple of Z position and actual file
             zlist.append((float(file.ImagePositionPatient[-1]),file))
             
         sortedlist = sorted(zlist,key=lambda x: x[0])
-        # create array space for image data
+        # create array space for image data, axes are Z, Y, X
         self.array = np.zeros((len(filelist), refcols, refrows))
         zs = [tup[0] for tup in sortedlist]
-        self._position = sortedlist[0][1].ImagePositionPatient
+        self._position = sortedlist[0][1].ImagePositionPatient # first slice's position
         self.slice_ref = zs
         if len(np.unique(np.diff(zs))) != 1:
             self.even_spacing = False
@@ -368,18 +375,14 @@ class PatientCT(PatientArray):
         # fill in array
         for i, (z, file) in enumerate(sortedlist):
             self.array[i,:,:] = util.getscaledimg(file)
+
+        
         
     def window_level(self, window, level, normalize=False):
-        upper = level + round(window/2)
-        lower = level - round(window/2)
-        
-        self.array[self.array > upper] = upper
-        self.array[self.array < lower] = lower
-        
-        if normalize:
-            # min-max standardization, puts all values between 0.0 and 1.0
-            self.array -= lower
-            self.array = self.array / window
+        # logic for this method has been moved to _preprocess_util.py
+        self.array = util.window_level(self.array, window, level, normalize)
+        # in future we should update execution scripts to not route
+        # through this method, but instead call the util function directly
 
 class PatientDose(PatientArray):
     def __init__(self, dcm):

@@ -40,6 +40,7 @@ def run():
             "Root file must only contain one patient's DCM"
         dcms.append(temp_dcm)
 
+    # sort files by modality
     ct_files = []
     dose_files = []
     ss_files = []
@@ -51,12 +52,14 @@ def run():
         elif dcm.Modality == "RTSTRUCT":
             ss_files.append(dcm)
     
+    # burden is on the user to only include one RTDOSE and one RTSTRUCT file
     if len(dose_files) == 1:
         dose_files = dose_files[0]
     if len(ss_files) > 1:
         raise Exception("Only one structure set file permitted in source dir.")
     ss = ss_files[0]
     
+    # instantiate CT array
     ct_arr = arrayclass.PatientCT(ct_files)
     ct_arr.rescale(args.pixel_size)
     
