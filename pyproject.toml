@@ -1,23 +1,14 @@
 [project]
 name = "m3cv"
 version = "0.1.0"
-description = "Software package for data handling and model construction for multimodal computer vision deep learning using medical data."
-authors = [
-    {name = "John Asbach"}
-]
-license = {text = "MIT"}
+description = "Add your description here"
 readme = "README.md"
-requires-python = ">=3.10"
+requires-python = ">=3.11"
 dependencies = [
-    "tensorflow (==2.17)",
-    "keras (>=3.8.0,<4.0.0)",
-    "h5py (>=3.12.1,<4.0.0)",
-    "pandas (>=2.2.3,<3.0.0)",
-    "pydicom (>=3.0.1,<4.0.0)",
-    "opencv-python (>=4.11.0.86,<5.0.0.0)"
+    "h5py>=3.15.1",
+    "keras>=3.11.3",
+    "opencv-python>=4.12.0.88",
+    "pandas>=2.3.3",
+    "pydicom>=3.0.1",
+    "tensorflow>=2.20.0",
 ]
-
-
-[build-system]
-requires = ["poetry-core>=2.0.0,<3.0.0"]
-build-backend = "poetry.core.masonry.api"
