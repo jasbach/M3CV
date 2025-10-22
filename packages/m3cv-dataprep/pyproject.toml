@@ -1,20 +1,23 @@
 [project]
-name = "m3cv"
+name = "m3cv-dataprep"
 version = "0.1.0"
 description = "Add your description here"
 readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [
     "h5py>=3.15.1",
-    "keras>=3.11.3",
+    "numpy>=2.2.6",
     "opencv-python>=4.12.0.88",
     "pandas>=2.3.3",
     "pydicom>=3.0.1",
-    "tensorflow>=2.20.0",
+    "scipy>=1.16.2",
     "typer>=0.19.2",
 ]
 
-[tool.uv.workspace]
-members = [
-    "packages/m3cv-dataprep",
+[project.scripts]
+m3cv-prep = "m3cv_prep.cli:pack"
+
+[dependency-groups]
+dev = [
+    "pytest>=8.4.2",
 ]
