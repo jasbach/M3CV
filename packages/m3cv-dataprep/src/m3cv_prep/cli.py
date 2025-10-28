@@ -1,12 +1,20 @@
-import sys
 import os
 import typer
 from typing_extensions import Annotated
 from rich import print
 from rich.progress import track
 
-import pydicom
-from m3cv_prep.file_handling import load_dicom_files_from_directory
+from m3cv_prep.file_handling import (
+    load_dicom_files_from_directory, 
+    save_array_to_h5
+)
+from m3cv_prep.dicom_utils import (
+    validate_fields,
+    validate_patientid,
+    group_dcms_by_modality
+)
+from m3cv_prep.array_tools import construct_arrays
+from m3cv_prep.arrayclasses import PatientCT, PatientDose
 
 app = typer.Typer(help="Data Preparation CLI for M3CV")
 
@@ -15,6 +23,7 @@ def pack(
     source: Annotated[str, typer.Argument()] = None,
     out_path: Annotated[str, typer.Option()] = None,
     recursive: Annotated[bool, typer.Option()] = False,
+    structures: Annotated[str, typer.Option()] = None,
 ):
     if source is None:
         source = os.getcwd()
@@ -27,18 +36,29 @@ def pack(
         if not dcm_files:
             print("[yellow]No valid DICOM files found.[/yellow]")
             raise typer.Exit(code=1)
-        validate_dcm_files(dcm_files) # TODO - implement validation function
-        array = placeholder(dcm_files) # TODO - implement array constructor
-        save_array_to_h5(array, out_path) # TODO - implement save function
+        validate_patientid(dcm_files)
+        grouped = group_dcms_by_modality(dcm_files)
+        ct_array, dose_array, structure_masks = construct_arrays(
+            grouped,
+            structure_names=structures.split(",") if structures else None
+        )
+        save_array_to_h5(out_path, ct_array, dose_array, structure_masks)
     else:
         for root, dirs, files in os.walk(source):
             dcm_files = load_dicom_files_from_directory(root)
             if not dcm_files:
                 continue
             print(f"[blue]Processing directory: {root}[/blue]")
-            validate_dcm_files(dcm_files) # TODO - implement validation function
-            array = placeholder(dcm_files) # TODO - implement array constructor
-            save_array_to_h5(array, out_path) # TODO - implement save function
+            validate_patientid(dcm_files)
+            grouped = group_dcms_by_modality(dcm_files)
+            ct_array, dose_array, structure_masks = construct_arrays(
+                grouped,
+                structure_names=structures.split(",") if structures else None
+            )
+            save_array_to_h5(out_path, ct_array, dose_array, structure_masks)
+
+def main():
+    app()
 
 if __name__ == "__main__":
     app()

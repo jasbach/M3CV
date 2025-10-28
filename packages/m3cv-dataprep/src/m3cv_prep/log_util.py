@@ -1,10 +1,10 @@
-import logging
+from logging import getLogger, Logger
 
 # global root logger for package and registry for child loggers
-root_logger = logging.getLogger("m3cv_prep")
+root_logger = getLogger("m3cv_prep")
 logger_registry = {}
 
-def get_logger(name: str) -> logging.Logger:
+def get_logger(name: str) -> Logger:
     """Get a logger for the m3cv_prep package.
 
     Args:

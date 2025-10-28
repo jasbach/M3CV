@@ -12,7 +12,7 @@ import numpy as np
 
 import scipy.ndimage.interpolation as scipy_mods
 
-import rpc3dl.preprocessing._preprocess_util as util
+import m3cv_prep._preprocess_util as util
 
 class PatientArray:
     """
@@ -341,7 +341,6 @@ class PatientCT(PatientArray):
         enforcement = [
             "StudyInstanceUID", 
             "FrameOfReferenceUID", 
-            "PixelSpacing", 
             "SliceThickness"
         ]
         
@@ -395,6 +394,10 @@ class PatientDose(PatientArray):
         
         Array is stored as (Z, Y, X)
         """
+        if isinstance(dcm, list):
+            if len(dcm) == 1:
+                dcm = dcm[0]
+
         if not isinstance(dcm, list):
             assert dcm.DoseSummationType == "PLAN", \
                 "Dose file passed is not a PLAN file, check DoseSummationType"

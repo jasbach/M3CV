@@ -4,6 +4,7 @@ import scipy.sparse
 from pydicom.dataset import Dataset
 
 from m3cv_prep.dicom_utils import validate_fields
+from m3cv_prep.arrayclasses import PatientCT, PatientDose, PatientMask
 
 
 def pack_array_sparsely(array: ndarray):
@@ -47,24 +48,21 @@ def unpack_sparse_array(
     dense[rows, cols, slices] = 1
     return dense
 
-# WIP
-"""
-def build_ct_array(ct_dcms: list[Dataset], void_val: int = -1000):
-    shared_fields = [
-        "PatientID",
-        "StudyInstanceUID",
-        "FrameOfReferenceUID",
-        "PixelSpacing",
-        "SliceThickness",
-        "ImageOrientationPatient",
-        "Rows",
-        "Columns",
-        "Modality",
-    ]
-    validate_fields(ct_dcms, shared_fields)
-    slice_positions = []
-    for dcm in ct_dcms:
-        position = dcm.ImagePositionPatient
-        slice_positions.append((position[2], dcm))
-    slice_positions.sort(key=lambda x: x[0])
-"""
+def construct_arrays(grouped_dcms, structure_names: list[str] | None = None):
+    ct_array = PatientCT(grouped_dcms['CT'])
+    dose_array = None
+    structure_masks = None
+    if 'RTDOSE' in grouped_dcms:
+        dose_array = PatientDose(grouped_dcms['RTDOSE'])
+        dose_array.align_with(ct_array)
+    if 'RTSTRUCT' in grouped_dcms and structure_names is not None:
+        if len(grouped_dcms['RTSTRUCT']) > 1:
+            raise ValueError("Multiple RTSTRUCT files found; please provide only one.")
+        structure_masks = {}
+        for name in structure_names:
+            structure_masks[name] = PatientMask(
+                reference=ct_array,
+                ssfile=grouped_dcms['RTSTRUCT'][0],
+                roi=name
+            )
+    return ct_array, dose_array, structure_masks

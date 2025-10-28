@@ -20,6 +20,8 @@ def validate_fields(dcms: list[Dataset], fields: list[str]):
     """
     Ensures that all DICOM files in the list share the same value for specified attributes.
     """
+    core_fields = ['PatientID', 'StudyInstanceUID']
+    fields = list(set(fields) | set(core_fields))
     errors = []
     for field in fields:
         first_value = getattr(dcms[0], field, None)
@@ -29,3 +31,20 @@ def validate_fields(dcms: list[Dataset], fields: list[str]):
                 break
     if errors:
         raise ValueError(" \n".join(errors))
+    
+def group_dcms_by_modality(dcms: list[Dataset]) -> dict[str, list[Dataset]]:
+    """
+    Sort DICOM files by their Modality attribute.
+
+    Args:
+        dcms (list): List of pydicom Dataset objects.
+    Returns:
+        dict: A dictionary mapping modality strings to lists of DICOM Dataset objects.
+    """
+    modality_dict = {}
+    for dcm in dcms:
+        modality = dcm.Modality
+        if modality not in modality_dict:
+            modality_dict[modality] = []
+        modality_dict[modality].append(dcm)
+    return modality_dict

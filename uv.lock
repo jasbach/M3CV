@@ -344,7 +344,7 @@ requires-dist = [
 [[package]]
 name = "m3cv-dataprep"
 version = "0.1.0"
-source = { virtual = "packages/m3cv-dataprep" }
+source = { editable = "packages/m3cv-dataprep" }
 dependencies = [
     { name = "h5py" },
     { name = "numpy" },
