@@ -19,6 +19,33 @@ from m3cv_prep.arrayclasses import PatientCT, PatientDose
 
 app = typer.Typer(help="Data Preparation CLI for M3CV")
 
+"""
+How to use the PACK command:
+
+CURRENTLY pack is the entrypoint into the app, so you don't need to explicitly call it,
+just call the m3cv-dataprep CLI and it will run `pack` by default.
+
+uv run m3cv-dataprep [SOURCE] --out-path [OUT_PATH] --recursive --structures [STRUCTURES]
+
+Arguments:
+    SOURCE: Path to the directory containing DICOM files. If not provided, defaults to the current working directory.
+Options:
+    --out-path: Path to save the output HDF5 file. If not provided, defaults to "packed_dicom.h5" in the source directory.
+    --recursive: If set, the tool will recursively search through subdirectories for DICOM files.
+    --structures: JSON string or path to JSON file mapping desired structure names to lists of possible ROI names in the RTSTRUCT.
+
+The structures JSON format is meant to standardize structure names across different naming conventions. It should be formatted as follows:
+{
+    "Standard_Structure_Name1": ["Possible_ROI_Name1", "Possible_ROI_Name2"],
+    "Standard_Structure_Name2": ["Possible_ROI_Name3", "Possible_ROI_Name4"]
+}
+All DICOM files with ROIs that match any of the names in the lists will be stored with the standard structure name in the HDF5 output.
+
+Example usage:
+    uv run m3cv-dataprep /path/to/dicom/files --out-path /path/to/output/packed_data.h5 
+        --recursive --structures '{"PTV": ["PTV1", "PTV"], "parotid_l": ["Parotid (Left)", "Left Parotid"]}'
+"""
+
 @app.command()
 def pack(
     source: Annotated[str, typer.Argument()] = None,
