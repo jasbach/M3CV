@@ -15,6 +15,7 @@ def validate_patientid(dcms):
     patient_ids = {dcm.PatientID for dcm in dcms}
     if len(patient_ids) > 1:
         raise ValueError("DICOM files belong to multiple patients.")
+    return patient_ids.pop()
     
 def validate_fields(dcms: list[Dataset], fields: list[str]):
     """

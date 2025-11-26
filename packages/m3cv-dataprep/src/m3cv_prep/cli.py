@@ -77,26 +77,26 @@ def pack(
         if not dcm_files:
             print("[yellow]No valid DICOM files found.[/yellow]")
             raise typer.Exit(code=1)
-        validate_patientid(dcm_files)
+        pid = validate_patientid(dcm_files)
         grouped = group_dcms_by_modality(dcm_files)
         ct_array, dose_array, structure_masks = construct_arrays(
             grouped,
             structure_dict=structure_dict if structures else None
         )
-        save_array_to_h5(out_path, ct_array, dose_array, structure_masks)
+        save_array_to_h5(out_path, ct_array, dose_array, structure_masks, patient_id=pid)
     else:
         for root, dirs, files in os.walk(source):
             dcm_files = load_dicom_files_from_directory(root)
             if not dcm_files:
                 continue
             print(f"[blue]Processing directory: {root}[/blue]")
-            validate_patientid(dcm_files)
+            pid =validate_patientid(dcm_files)
             grouped = group_dcms_by_modality(dcm_files)
             ct_array, dose_array, structure_masks = construct_arrays(
                 grouped,
                 structure_dict=structure_dict if structures else None
             )
-            save_array_to_h5(out_path, ct_array, dose_array, structure_masks)
+            save_array_to_h5(out_path, ct_array, dose_array, structure_masks, patient_id=pid)
 
 def main():
     app()

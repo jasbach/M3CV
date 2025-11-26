@@ -48,6 +48,7 @@ def save_array_to_h5(
         ct_array: ndarray,
         dose_array: ndarray | None = None,
         structure_masks: dict[str, ndarray] | None = None,
+        patient_id: str | None = None,
         metadata: dict | None = None,
         overwrite: bool = False,
         ):
@@ -59,6 +60,7 @@ def save_array_to_h5(
         ct_array (ndarray): 3D numpy array representing the CT scan.
         dose_array (ndarray, optional): 3D numpy array representing the dose distribution.
         structure_masks (dict[str, ndarray], optional): Dictionary mapping ROI names to 3D mask arrays.
+        patient_id (str, optional): Patient ID to store as an attribute in the HDF5 file.
         metadata (dict, optional): Additional metadata to store as attributes in the HDF5 file.
         overwrite (bool): Whether to overwrite existing file at out_path.
     Raises:
@@ -97,6 +99,8 @@ def save_array_to_h5(
         if metadata is not None:
             for key, value in metadata.items():
                 f.attrs[key] = value
+        if patient_id is not None:
+            f.attrs['patient_id'] = patient_id
 
 def load_array_from_h5(
         in_path: str,
