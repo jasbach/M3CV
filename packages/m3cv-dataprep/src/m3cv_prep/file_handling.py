@@ -74,7 +74,7 @@ def save_array_to_h5(
     if dose_array is not None:
         shapes.append(dose_array.shape)
     if structure_masks is not None:
-        shapes.extend(mask.shape for mask in structure_masks.values())
+        shapes.extend(mask.array.shape for mask in structure_masks.values())
     if len(set(shapes)) > 1:
         raise ValueError("All arrays must have the same shape to be saved together.")
     if os.path.exists(out_path) and not overwrite:
@@ -90,7 +90,7 @@ def save_array_to_h5(
             for roi_name, mask in structure_masks.items():
                 # create group in which to write sparse array mask data
                 group = f.create_group(f'structures/{roi_name}')
-                r, c, sl = pack_array_sparsely(mask)
+                r, c, sl = pack_array_sparsely(mask.array)
                 group.create_dataset('rows', data=r)
                 group.create_dataset('cols', data=c)
                 group.create_dataset('slices', data=sl)

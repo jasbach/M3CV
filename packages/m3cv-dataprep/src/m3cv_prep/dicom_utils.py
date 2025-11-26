@@ -48,3 +48,18 @@ def group_dcms_by_modality(dcms: list[Dataset]) -> dict[str, list[Dataset]]:
             modality_dict[modality] = []
         modality_dict[modality].append(dcm)
     return modality_dict
+
+def check_ROI_exists(ssfile: Dataset, roi_name: str) -> bool:
+    """
+    Check if a given ROI name exists in the RTSTRUCT DICOM file.
+
+    Args:
+        ssfile (Dataset): The RTSTRUCT DICOM Dataset.
+        roi_name (str): The name of the ROI to check.
+    Returns:
+        bool: True if the ROI exists, False otherwise.
+    """
+    for roi in ssfile.StructureSetROISequence:
+        if roi.ROIName == roi_name:
+            return True
+    return False

@@ -1,5 +1,6 @@
 import os
 import typer
+import json
 from typing_extensions import Annotated
 from rich import print
 from rich.progress import track
@@ -31,6 +32,19 @@ def pack(
     if out_path is None:
         out_path = os.path.join(source, "packed_dicom.h5") # TODO - read patient ID from DICOMs for default filename
 
+    if structures is not None:
+        print(f"[blue]Evaluating structures argument...[/blue]")
+        try:
+            if "'" in structures:
+                structures = structures.replace("'", '"')
+            structure_dict = json.loads(structures)
+            print(f"[green]Parsed structures JSON successfully.[/green]")
+        except json.JSONDecodeError as e:
+            print(f"[blue]Attempting to read structure name map as JSON file:[/blue] {structures}")
+            with open(structures, 'r') as f:
+                structure_dict = json.load(f)
+        
+
     if not recursive:
         dcm_files = load_dicom_files_from_directory(source)
         if not dcm_files:
@@ -40,7 +54,7 @@ def pack(
         grouped = group_dcms_by_modality(dcm_files)
         ct_array, dose_array, structure_masks = construct_arrays(
             grouped,
-            structure_names=structures.split(",") if structures else None
+            structure_dict=structure_dict if structures else None
         )
         save_array_to_h5(out_path, ct_array, dose_array, structure_masks)
     else:
@@ -53,7 +67,7 @@ def pack(
             grouped = group_dcms_by_modality(dcm_files)
             ct_array, dose_array, structure_masks = construct_arrays(
                 grouped,
-                structure_names=structures.split(",") if structures else None
+                structure_dict=structure_dict if structures else None
             )
             save_array_to_h5(out_path, ct_array, dose_array, structure_masks)
 

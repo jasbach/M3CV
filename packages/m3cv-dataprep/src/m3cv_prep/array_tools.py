@@ -3,7 +3,7 @@ from numpy import ndarray
 import scipy.sparse
 from pydicom.dataset import Dataset
 
-from m3cv_prep.dicom_utils import validate_fields
+from m3cv_prep.dicom_utils import validate_fields, check_ROI_exists
 from m3cv_prep.arrayclasses import PatientCT, PatientDose, PatientMask
 
 
@@ -45,24 +45,30 @@ def unpack_sparse_array(
         ndarray: The reconstructed 3D array.
     """
     dense = np.zeros(refshape, dtype=float)
-    dense[rows, cols, slices] = 1
+    dense[slices, rows, cols] = 1
     return dense
 
-def construct_arrays(grouped_dcms, structure_names: list[str] | None = None):
+def construct_arrays(grouped_dcms, structure_dict: dict[str, list] | None = None):
     ct_array = PatientCT(grouped_dcms['CT'])
     dose_array = None
     structure_masks = None
     if 'RTDOSE' in grouped_dcms:
         dose_array = PatientDose(grouped_dcms['RTDOSE'])
         dose_array.align_with(ct_array)
-    if 'RTSTRUCT' in grouped_dcms and structure_names is not None:
+    if 'RTSTRUCT' in grouped_dcms and structure_dict is not None:
         if len(grouped_dcms['RTSTRUCT']) > 1:
             raise ValueError("Multiple RTSTRUCT files found; please provide only one.")
         structure_masks = {}
-        for name in structure_names:
-            structure_masks[name] = PatientMask(
-                reference=ct_array,
-                ssfile=grouped_dcms['RTSTRUCT'][0],
-                roi=name
-            )
+        for key, value in structure_dict.items():
+            for v in value:
+                # check if this ROI name is in the RTSTRUCT
+                if check_ROI_exists(grouped_dcms['RTSTRUCT'][0], v):
+                    structure_masks[key] = PatientMask(
+                        reference=ct_array,
+                        ssfile=grouped_dcms['RTSTRUCT'][0],
+                        roi=v
+                    )
+                    break
+            if key not in structure_masks:
+                print(f"[yellow]Warning: None of the ROI names {value} were found in the RTSTRUCT.[/yellow]")
     return ct_array, dose_array, structure_masks

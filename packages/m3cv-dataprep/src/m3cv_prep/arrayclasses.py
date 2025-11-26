@@ -473,10 +473,13 @@ class PatientMask(PatientArray):
         self.proper_name = proper_name
         
         self.array = np.zeros_like(reference.array)
+        ref_num = None
         for roi_info in ssfile.StructureSetROISequence:
             if roi_info.ROIName == roi:
                 ref_num = roi_info.ROINumber
                 break
+        if ref_num is None:
+            raise ValueError(f"ROI name {roi} not found in RTSTRUCT.")
         for data in ssfile.ROIContourSequence:
             if data.ReferencedROINumber == ref_num:
                 contourseq = data.ContourSequence
