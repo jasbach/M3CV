@@ -1,20 +1,28 @@
+"""Array tools for packing/unpacking and constructing patient arrays."""
+
+from __future__ import annotations
+
+from typing import TYPE_CHECKING
+
 import numpy as np
-from numpy import ndarray
 import scipy.sparse
-from pydicom.dataset import Dataset
+from numpy.typing import NDArray
 
-from m3cv_prep.dicom_utils import validate_fields
-from m3cv_prep.arrayclasses import PatientCT, PatientDose, PatientMask
+from m3cv_prep.arrays import PatientCT, PatientDose, PatientMask
+
+if TYPE_CHECKING:
+    from pydicom.dataset import Dataset
 
 
-def pack_array_sparsely(array: ndarray):
+def pack_array_sparsely(array: NDArray) -> tuple[NDArray, NDArray, NDArray]:
     """Convert a 3D mask array into sparse row, col, slice arrays for storage.
-    
+
     Args:
-        mask (ndarray): 3D numpy array representing the mask.
+        array: 3D numpy array representing the mask.
+
     Returns:
-        tuple: Three 1D numpy arrays representing the row indices, column indices,
-               and slice indices of the non-zero elements in the mask.
+        Tuple of (row, col, slices) 1D numpy arrays representing the
+        indices of the non-zero elements.
     """
     row = np.array([], dtype=int)
     col = np.array([], dtype=int)
@@ -27,42 +35,64 @@ def pack_array_sparsely(array: ndarray):
         row = np.concatenate([row, sp.row])
     return row, col, slices
 
+
 def unpack_sparse_array(
-        rows: ndarray,
-        cols: ndarray,
-        slices: ndarray,
-        refshape: tuple[int, int, int]
-        ) -> ndarray:
+    rows: NDArray,
+    cols: NDArray,
+    slices: NDArray,
+    refshape: tuple[int, int, int],
+) -> NDArray:
     """Convert sparse row, col, slice arrays back into a 3D mask array.
 
     Args:
-        rows (ndarray): 1D array of row indices.
-        cols (ndarray): 1D array of column indices.
-        slices (ndarray): 1D array of slice indices.
-        refshape (tuple[int, int, int]): The shape of the original 3D array.
+        rows: 1D array of row indices.
+        cols: 1D array of column indices.
+        slices: 1D array of slice indices.
+        refshape: The shape of the original 3D array.
 
     Returns:
-        ndarray: The reconstructed 3D array.
+        The reconstructed 3D array.
     """
     dense = np.zeros(refshape, dtype=float)
     dense[rows, cols, slices] = 1
     return dense
 
-def construct_arrays(grouped_dcms, structure_names: list[str] | None = None):
-    ct_array = PatientCT(grouped_dcms['CT'])
+
+def construct_arrays(
+    grouped_dcms: dict[str, list[Dataset]],
+    structure_names: list[str] | None = None,
+) -> tuple[PatientCT, PatientDose | None, dict[str, PatientMask] | None]:
+    """Construct patient arrays from grouped DICOM files.
+
+    Args:
+        grouped_dcms: Dictionary mapping modality to list of DICOM Datasets.
+        structure_names: List of ROI names to create masks for.
+
+    Returns:
+        Tuple of (ct_array, dose_array, structure_masks).
+        dose_array is None if no RTDOSE files provided.
+        structure_masks is None if no RTSTRUCT or structure_names provided.
+
+    Raises:
+        ValueError: If multiple RTSTRUCT files found.
+    """
+    ct_array = PatientCT.from_dicom_files(grouped_dcms["CT"])
     dose_array = None
     structure_masks = None
-    if 'RTDOSE' in grouped_dcms:
-        dose_array = PatientDose(grouped_dcms['RTDOSE'])
+
+    if "RTDOSE" in grouped_dcms:
+        dose_array = PatientDose.from_dicom(grouped_dcms["RTDOSE"])
         dose_array.align_with(ct_array)
-    if 'RTSTRUCT' in grouped_dcms and structure_names is not None:
-        if len(grouped_dcms['RTSTRUCT']) > 1:
+
+    if "RTSTRUCT" in grouped_dcms and structure_names is not None:
+        if len(grouped_dcms["RTSTRUCT"]) > 1:
             raise ValueError("Multiple RTSTRUCT files found; please provide only one.")
         structure_masks = {}
         for name in structure_names:
-            structure_masks[name] = PatientMask(
+            structure_masks[name] = PatientMask.from_rtstruct(
                 reference=ct_array,
-                ssfile=grouped_dcms['RTSTRUCT'][0],
-                roi=name
+                ssfile=grouped_dcms["RTSTRUCT"][0],
+                roi_name=name,
             )
+
     return ct_array, dose_array, structure_masks

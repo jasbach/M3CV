@@ -1,7 +1,7 @@
-import pytest
 import numpy as np
 
 from m3cv_prep.array_tools import pack_array_sparsely, unpack_sparse_array
+
 
 def test_pack_unpack_sparse_array():
     # Create a sample 3D array
@@ -17,4 +17,6 @@ def test_pack_unpack_sparse_array():
     unpacked_array = unpack_sparse_array(rows, cols, slices, original_array.shape)
 
     # Assert that the unpacked array matches the original array
-    assert np.array_equal(original_array, unpacked_array), "Unpacked array does not match the original"
+    assert np.array_equal(
+        original_array, unpacked_array
+    ), "Unpacked array does not match the original"

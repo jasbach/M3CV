@@ -1,8 +1,9 @@
-from logging import getLogger, Logger
+from logging import Logger, getLogger
 
 # global root logger for package and registry for child loggers
 root_logger = getLogger("m3cv_prep")
 logger_registry = {}
+
 
 def get_logger(name: str) -> Logger:
     """Get a logger for the m3cv_prep package.
@@ -16,6 +17,7 @@ def get_logger(name: str) -> Logger:
     if name not in logger_registry:
         logger_registry[name] = root_logger.getChild(name)
     return logger_registry[name]
+
 
 def set_logging_level(level: int) -> None:
     """Set the logging level for the m3cv_prep package.

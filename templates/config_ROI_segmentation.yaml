@@ -49,7 +49,7 @@ data:
     zoom: 0.1
     shift: 0.15
     rotate: 10
-    
+
   runtime:
     seed: 42
     class_balance:
