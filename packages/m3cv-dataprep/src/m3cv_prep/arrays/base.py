@@ -2,19 +2,85 @@
 
 from __future__ import annotations
 
-import copy
 from typing import TYPE_CHECKING
 
 import cv2
 import numpy as np
-import scipy.ndimage.interpolation as scipy_mods
 from numpy.typing import NDArray
 
-from m3cv_prep.arrays.exceptions import UnevenSpacingError
+from m3cv_prep.arrays.exceptions import SliceCompatibilityError, UnevenSpacingError
 from m3cv_prep.arrays.protocols import Alignable, SpatialMetadata
 
 if TYPE_CHECKING:
     from pydicom.dataset import Dataset
+
+
+def check_slice_compatibility(
+    source_slice_ref: tuple[float, ...],
+    target_slice_ref: tuple[float, ...],
+    source_slice_thickness: float,
+    target_slice_thickness: float,
+) -> tuple[list[float], list[float]]:
+    """Check that source slices align with and are contiguous within target slices.
+
+    Validates two conditions:
+    1. Each source slice WITHIN the target extent aligns with a target slice
+    2. The aligned target slices form a contiguous block (no gaps)
+
+    Source slices outside the target extent are ignored - they will be trimmed
+    during alignment, which is expected behavior. Similarly, target slices outside
+    the source extent will be padded with voidval, which is also expected.
+
+    The contiguity check prevents scenarios where source slices are interleaved
+    through the target volume (e.g., source at Z=0,6,12 with target at Z=0,3,6,9,12),
+    which would leave intermediate target slices with incorrect voidval data.
+
+    Args:
+        source_slice_ref: Z positions of source slices (e.g., dose).
+        target_slice_ref: Z positions of target slices (e.g., CT).
+        source_slice_thickness: Slice thickness of source array.
+        target_slice_thickness: Slice thickness of target array.
+
+    Returns:
+        Tuple of (misaligned_slices, missing_slices):
+        - misaligned_slices: Source Z positions within target extent that don't
+          align with any target slice
+        - missing_slices: Target Z positions that fall within source's coverage
+          but have no corresponding source slice (indicating gaps/interleaving)
+    """
+    tolerance = min(source_slice_thickness, target_slice_thickness) * 0.1
+    target_z = np.array(target_slice_ref)
+    target_z_min = float(np.min(target_z))
+    target_z_max = float(np.max(target_z))
+
+    # Check 1: Each source slice WITHIN target extent must align with a target slice
+    # Source slices outside target extent will be trimmed, which is fine
+    misaligned = []
+    aligned_target_indices = []
+    for z in source_slice_ref:
+        # Skip source slices outside target extent - they'll be trimmed
+        if z < target_z_min - tolerance or z > target_z_max + tolerance:
+            continue
+
+        distances = np.abs(target_z - z)
+        min_idx = np.argmin(distances)
+        if distances[min_idx] > tolerance:
+            misaligned.append(z)
+        else:
+            aligned_target_indices.append(min_idx)
+
+    # Check 2: Aligned target indices must be contiguous (no gaps)
+    missing = []
+    if aligned_target_indices and not misaligned:
+        aligned_target_indices.sort()
+        expected_range = range(
+            aligned_target_indices[0], aligned_target_indices[-1] + 1
+        )
+        for idx in expected_range:
+            if idx not in aligned_target_indices:
+                missing.append(float(target_z[idx]))
+
+    return misaligned, missing
 
 
 class PatientArray:
@@ -226,17 +292,43 @@ class PatientArray:
         x_idx = int(round((x - self.position[0]) / self.pixel_size[1]))
         return (z_idx, y_idx, x_idx)
 
-    def align_with(self, other: Alignable) -> None:
+    def align_with(self, other: Alignable, strict_slice_alignment: bool = True) -> None:
         """Align this array to match another array's spatial extent.
 
         Args:
             other: Another Alignable object to align with.
+            strict_slice_alignment: If True (default), verify that this array's
+                slices align with the target's slices and form a contiguous block.
+                This prevents silent data misrepresentation when slice grids differ.
 
         Raises:
             UnevenSpacingError: If either array has uneven slice spacing.
+            SliceCompatibilityError: If strict_slice_alignment is True and slices
+                don't align or aren't contiguous within the target volume.
         """
         if not (self.even_spacing and other.spatial_metadata.even_spacing):
             raise UnevenSpacingError()
+
+        if strict_slice_alignment:
+            misaligned, missing = check_slice_compatibility(
+                self.slice_ref,
+                other.spatial_metadata.slice_ref,
+                self.slice_thickness,
+                other.spatial_metadata.slice_thickness,
+            )
+            if misaligned:
+                raise SliceCompatibilityError(
+                    f"Source slices at Z={misaligned} don't align with any target slice. "
+                    "Set strict_slice_alignment=False to bypass this check.",
+                    misaligned_slices=misaligned,
+                )
+            if missing:
+                raise SliceCompatibilityError(
+                    f"Target slices at Z={missing} have no corresponding source slice. "
+                    "This indicates non-contiguous coverage that would leave gaps. "
+                    "Set strict_slice_alignment=False to bypass this check.",
+                    missing_slices=missing,
+                )
 
         if other.spatial_metadata.pixel_size != self.pixel_size:
             self.rescale(other.spatial_metadata.pixel_size)
@@ -347,128 +439,3 @@ class PatientArray:
             start[1] : start[1] + shape[1],
             start[2] : start[2] + shape[2],
         ]
-
-    def rotate(
-        self,
-        degree_range: float = 15.0,
-        rng: np.random.Generator | None = None,
-        degrees: float | None = None,
-    ) -> None:
-        """Rotate array about the Z axis.
-
-        Args:
-            degree_range: Maximum degrees +/- of rotation. Ignored if degrees specified.
-            rng: NumPy random Generator for reproducibility. If None, creates new one.
-            degrees: Explicit rotation angle, overrides random generation.
-        """
-        if not hasattr(self, "original"):
-            self.original = copy.deepcopy(self._array)
-
-        if rng is None:
-            rng = np.random.default_rng()
-
-        if degrees is None:
-            intensity = rng.random()
-            degrees = intensity * degree_range * 2 - degree_range
-
-        self._array = scipy_mods.rotate(
-            self._array,
-            angle=degrees,
-            axes=(1, 2),
-            reshape=False,
-            mode="constant",
-            cval=self.voidval,
-        )
-
-    def shift(
-        self,
-        max_shift: float = 0.2,
-        rng: np.random.Generator | None = None,
-        pixelshift: tuple[int, int] | None = None,
-    ) -> None:
-        """Shift array along Y and X dimensions.
-
-        Args:
-            max_shift: Maximum shift as fraction of array size (0.0 to 1.0).
-            rng: NumPy random Generator for reproducibility.
-            pixelshift: Explicit (Y, X) pixel shift, overrides random generation.
-        """
-        if not hasattr(self, "original"):
-            self.original = copy.deepcopy(self._array)
-
-        max_y_pix = max_shift * self.rows
-        max_x_pix = max_shift * self.columns
-
-        if rng is None:
-            rng = np.random.default_rng()
-
-        if pixelshift is None:
-            y_intensity = rng.random()
-            x_intensity = rng.random()
-            yshift = round(y_intensity * max_y_pix * 2 - max_y_pix)
-            xshift = round(x_intensity * max_x_pix * 2 - max_x_pix)
-            shiftspec = (0, yshift, xshift)
-        else:
-            shiftspec = (0, pixelshift[0], pixelshift[1])
-
-        self._array = scipy_mods.shift(
-            self._array,
-            shift=shiftspec,
-            mode="constant",
-            cval=self.voidval,
-        )
-
-    def zoom(
-        self,
-        max_zoom_factor: float = 0.2,
-        rng: np.random.Generator | None = None,
-        zoom_factor: float | None = None,
-    ) -> None:
-        """Zoom array uniformly in all dimensions.
-
-        Args:
-            max_zoom_factor: Maximum zoom deviation from 1.0 (e.g., 0.2 means 0.8-1.2x).
-            rng: NumPy random Generator for reproducibility.
-            zoom_factor: Explicit zoom factor, overrides random generation.
-        """
-        if not hasattr(self, "original"):
-            self.original = copy.deepcopy(self._array)
-
-        if rng is None:
-            rng = np.random.default_rng()
-
-        if zoom_factor is None:
-            intensity = rng.random()
-            zoom_factor = 1 + intensity * max_zoom_factor * 2 - max_zoom_factor
-
-        original_shape = self._array.shape
-
-        self._array = scipy_mods.zoom(
-            self._array,
-            zoom=[zoom_factor, zoom_factor, zoom_factor],
-            mode="constant",
-            cval=self.voidval,
-        )
-
-        if zoom_factor > 1.0:
-            self._array = self.bounding_box(original_shape)
-        elif zoom_factor < 1.0:
-            diffs = np.array(original_shape) - np.array(self._array.shape)
-            diffs = np.round(diffs / 2).astype(int)
-            pad_spec = [
-                (diffs[0], diffs[0]),
-                (diffs[1], diffs[1]),
-                (diffs[2], diffs[2]),
-            ]
-            self._array = np.pad(
-                self._array,
-                pad_width=pad_spec,
-                mode="constant",
-                constant_values=self.voidval,
-            )
-
-    def reset_augments(self) -> None:
-        """Reset array to pre-augmentation state."""
-        if hasattr(self, "original"):
-            self._array = copy.deepcopy(self.original)
-            del self.original

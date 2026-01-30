@@ -9,7 +9,7 @@ This module provides classes for working with patient arrays from DICOM data:
 Also provides protocols and exceptions for type-safe operations.
 """
 
-from m3cv_prep.arrays.base import PatientArray
+from m3cv_prep.arrays.base import PatientArray, check_slice_compatibility
 from m3cv_prep.arrays.ct import PatientCT
 from m3cv_prep.arrays.dose import PatientDose
 from m3cv_prep.arrays.exceptions import (
@@ -18,6 +18,7 @@ from m3cv_prep.arrays.exceptions import (
     DoseTypeError,
     MetadataMismatchError,
     ROINotFoundError,
+    SliceCompatibilityError,
     UnevenSpacingError,
 )
 from m3cv_prep.arrays.mask import PatientMask
@@ -33,10 +34,13 @@ __all__ = [
     # Protocols
     "Alignable",
     "SpatialMetadata",
+    # Utility functions
+    "check_slice_compatibility",
     # Exceptions
     "ArrayError",
     "MetadataMismatchError",
     "AlignmentError",
+    "SliceCompatibilityError",
     "UnevenSpacingError",
     "ROINotFoundError",
     "DoseTypeError",

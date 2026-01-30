@@ -41,6 +41,11 @@ def pack(
         )
         save_array_to_h5(out_path, ct_array, dose_array, structure_masks)
     else:
+        # In recursive mode, out_path is treated as output directory
+        if out_path is None:
+            out_path = source
+        os.makedirs(out_path, exist_ok=True)
+
         for root, _dirs, _files in os.walk(source):
             dcm_files = load_dicom_files_from_directory(root)
             if not dcm_files:
@@ -51,7 +56,11 @@ def pack(
             ct_array, dose_array, structure_masks = construct_arrays(
                 grouped, structure_names=structures.split(",") if structures else None
             )
-            save_array_to_h5(out_path, ct_array, dose_array, structure_masks)
+            # Generate unique filename per patient
+            patient_id = ct_array.patient_id or os.path.basename(root)
+            patient_out_path = os.path.join(out_path, f"{patient_id}.h5")
+            save_array_to_h5(patient_out_path, ct_array, dose_array, structure_masks)
+            print(f"[green]Saved: {patient_out_path}[/green]")
 
 
 def main():

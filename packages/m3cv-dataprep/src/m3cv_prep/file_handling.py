@@ -298,3 +298,63 @@ def read_label_from_h5(h5_file: h5py.File) -> int | None:
     if "label" not in h5_file.attrs:
         return None
     return int(h5_file.attrs["label"])
+
+
+def validate_spatial_compatibility(
+    ct: PatientCT,
+    dose: PatientDose | None = None,
+    *masks: PatientMask,
+) -> None:
+    """Validate that all arrays have compatible spatial metadata.
+
+    Checks that pixel size, slice references, array shapes, and patient IDs
+    all match across the provided arrays.
+
+    Args:
+        ct: PatientCT array (required baseline).
+        dose: PatientDose array (optional).
+        *masks: Any number of PatientMask arrays.
+
+    Raises:
+        ValueError: If any compatibility check fails.
+    """
+    arrays_to_check = [ct]
+    if dose is not None:
+        arrays_to_check.append(dose)
+    arrays_to_check.extend(masks)
+
+    if len(arrays_to_check) < 2:
+        return  # Nothing to compare
+
+    baseline = arrays_to_check[0]
+    for arr in arrays_to_check[1:]:
+        if arr.pixel_size != baseline.pixel_size:
+            raise ValueError(
+                f"Pixel size mismatch: {baseline.pixel_size} vs {arr.pixel_size}"
+            )
+        if arr.slice_ref != baseline.slice_ref:
+            raise ValueError("Slice reference mismatch between arrays")
+        if arr.array.shape != baseline.array.shape:
+            raise ValueError(
+                f"Array shape mismatch: {baseline.array.shape} vs {arr.array.shape}"
+            )
+        if arr.patient_id != baseline.patient_id:
+            raise ValueError(
+                f"Patient ID mismatch: {baseline.patient_id} vs {arr.patient_id}"
+            )
+
+
+def get_h5_dataset_keys(f: h5py.File | h5py.Group) -> list[str]:
+    """Get all dataset keys in an HDF5 file or group.
+
+    Recursively finds all datasets (not groups) in the HDF5 structure.
+
+    Args:
+        f: Open HDF5 File or Group object.
+
+    Returns:
+        List of dataset key paths.
+    """
+    keys = []
+    f.visit(lambda key: keys.append(key) if isinstance(f[key], h5py.Dataset) else None)
+    return keys

@@ -34,6 +34,20 @@ class UnevenSpacingError(AlignmentError):
         super().__init__(message)
 
 
+class SliceCompatibilityError(AlignmentError):
+    """Raised when slice positions are incompatible for alignment."""
+
+    def __init__(
+        self,
+        message: str,
+        misaligned_slices: list[float] | None = None,
+        missing_slices: list[float] | None = None,
+    ):
+        self.misaligned_slices = misaligned_slices
+        self.missing_slices = missing_slices
+        super().__init__(message)
+
+
 class ROINotFoundError(ArrayError):
     """Raised when a requested ROI is not found in the structure set."""
 

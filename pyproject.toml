@@ -24,6 +24,7 @@ dev = [
 [tool.uv.workspace]
 members = [
     "packages/m3cv-dataprep",
+    "packages/m3cv-data",
 ]
 
 [tool.ruff]
@@ -32,8 +33,7 @@ line-length = 88
 src = ["src", "packages/*/src"]
 exclude = [
     "src/m3cv",                                    # Legacy code, needs refactoring
-    "packages/m3cv-dataprep/src/m3cv_prep/pending_refactor",  # Pending refactor
-    "packages/m3cv-dataprep/src/m3cv_prep/handler.py",        # Legacy handler
+    "packages/m3cv-dataprep/src/m3cv_prep/nonvolume_logic_reference",  # Reference only
     "_oldfiles",
 ]
 
@@ -53,4 +53,4 @@ ignore = [
 ]
 
 [tool.ruff.lint.isort]
-known-first-party = ["m3cv", "m3cv_prep"]
+known-first-party = ["m3cv", "m3cv_prep", "m3cv_data"]

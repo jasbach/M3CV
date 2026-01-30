@@ -8,15 +8,17 @@ class TestDeprecatedImports:
 
     def test_arrayclasses_import_warning(self):
         """Test that importing from arrayclasses shows deprecation warning."""
+        import sys
+
+        # Remove from cache if present so we get a fresh import
+        if "m3cv_prep.arrayclasses" in sys.modules:
+            del sys.modules["m3cv_prep.arrayclasses"]
+
         with warnings.catch_warnings(record=True) as w:
             warnings.simplefilter("always")
 
-            # Import the deprecated module
-            import sys
-
-            # Remove from cache if present
-            if "m3cv_prep.arrayclasses" in sys.modules:
-                del sys.modules["m3cv_prep.arrayclasses"]
+            # Import the deprecated module - this should trigger the warning
+            import m3cv_prep.arrayclasses  # noqa: F401
 
             # Check for deprecation warning
             deprecation_warnings = [
