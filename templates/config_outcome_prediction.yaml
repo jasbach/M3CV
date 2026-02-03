@@ -18,7 +18,7 @@ data:
       eortc_qol: /path/to/QOLsurvey.csv
       clinical: /path/to/clinical_patient_db.csv
     date_handling: relative
-    anchor_date: RT Completion Date  
+    anchor_date: RT Completion Date
 
   preprocessing:
     static:
@@ -68,7 +68,7 @@ data:
       zoom: 0.2
       rotate: 15
       shift: 0.2
-    
+
 
   runtime:
     seed: 42
