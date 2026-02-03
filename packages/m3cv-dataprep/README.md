@@ -4,7 +4,7 @@ Data preparation package for M3CV - converts DICOM radiotherapy data into HDF5 f
 
 ## Status
 
-Under active development. Core DICOM processing is functional. CLI refinements and config-based execution coming soon.
+✅ **Ready for use.** Core DICOM processing and CLI are functional.
 
 ## Features
 
@@ -22,38 +22,61 @@ uv sync
 
 ## CLI Usage
 
-Pack DICOM files from a directory into an HDF5 file:
+### Inspect DICOM Data
+
+Use `inspect` to explore your DICOM files before processing:
 
 ```bash
-# Single directory
-uv run m3cv-prep /path/to/dicoms --out-path output.h5
+# Summarize patients and modalities in a directory
+uv run m3cv-prep inspect /path/to/dicoms
+
+# Show detailed info (structure names, dose types)
+uv run m3cv-prep inspect /path/to/dicoms --details
+```
+
+### Pack DICOM to HDF5
+
+Use `pack` to convert DICOM files into HDF5 format:
+
+```bash
+# Single patient directory
+uv run m3cv-prep pack /path/to/dicoms --out-path output.h5
 
 # With structure masks
-uv run m3cv-prep /path/to/dicoms --out-path output.h5 --structures "PTV,Parotid_L,Parotid_R"
+uv run m3cv-prep pack /path/to/dicoms --out-path output.h5 --structures "PTV,Parotid_L,Parotid_R"
 
 # Recursive (process multiple patient directories)
-uv run m3cv-prep /path/to/dataset --out-path /path/to/output_dir --recursive
+uv run m3cv-prep pack /path/to/dataset --out-path /path/to/output_dir --recursive
 ```
 
 ### Requirements
 
-- Source directory should contain one patient's DICOM files
+- **Single mode**: Source directory should contain one patient's DICOM files
+- **Recursive mode**: Each subdirectory with DICOM files is treated as one patient
 - Supported modalities: CT, RTDOSE, RTSTRUCT
-- Only one RTSTRUCT file per directory
+- Only one RTSTRUCT file per patient directory
 
 ## Package Structure
 
 ```
 m3cv_prep/
-├── arrays/          # Core array classes (PatientCT, PatientDose, PatientMask)
-├── cli.py           # Typer-based CLI
-├── array_tools.py   # Array construction and sparse packing
-├── dicom_utils.py   # DICOM file utilities
-└── file_handling.py # HDF5 I/O operations
+├── arrays/           # Core array classes
+│   ├── base.py       # PatientArray base class
+│   ├── ct.py         # PatientCT
+│   ├── dose.py       # PatientDose
+│   ├── mask.py       # PatientMask
+│   ├── protocols.py  # Alignable, SpatialMetadata
+│   └── exceptions.py # Custom exception types
+├── cli/              # Typer-based CLI
+│   ├── pack.py       # DICOM → HDF5 conversion
+│   ├── inspect.py    # DICOM discovery and summary
+│   └── _utils.py     # Shared CLI utilities
+├── array_tools.py    # Array construction and sparse packing
+├── dicom_utils.py    # DICOM file utilities
+└── file_handling.py  # HDF5 I/O operations
 ```
 
 ## Roadmap
 
-- [ ] Improved CLI with better error messages and progress feedback
 - [ ] Config-based batch processing
 - [ ] Non-volumetric data attachment (clinical variables, surveys)

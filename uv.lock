@@ -12,6 +12,7 @@ members = [
     "m3cv",
     "m3cv-data",
     "m3cv-dataprep",
+    "m3cv-models",
 ]
 
 [[package]]
@@ -496,6 +497,29 @@ requires-dist = [
 
 [package.metadata.requires-dev]
 dev = [{ name = "pytest", specifier = ">=8.4.2" }]
+
+[[package]]
+name = "m3cv-models"
+version = "0.1.0"
+source = { editable = "packages/m3cv-models" }
+dependencies = [
+    { name = "keras" },
+    { name = "tensorflow" },
+]
+
+[package.dev-dependencies]
+dev = [
+    { name = "pytest" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "keras", specifier = ">=3.0.0" },
+    { name = "tensorflow", specifier = ">=2.15.0" },
+]
+
+[package.metadata.requires-dev]
+dev = [{ name = "pytest", specifier = ">=8.0.0" }]
 
 [[package]]
 name = "markdown"

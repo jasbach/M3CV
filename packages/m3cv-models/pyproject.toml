@@ -1,0 +1,22 @@
+[project]
+name = "m3cv-models"
+version = "0.1.0"
+description = "Neural network architectures for multimodal medical imaging"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "keras>=3.0.0",
+    "tensorflow>=2.15.0",
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=8.0.0",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/m3cv_models"]

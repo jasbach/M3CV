@@ -25,14 +25,15 @@ dev = [
 members = [
     "packages/m3cv-dataprep",
     "packages/m3cv-data",
+    "packages/m3cv-models",
 ]
 
 [tool.ruff]
 target-version = "py311"
 line-length = 88
-src = ["src", "packages/*/src"]
+src = ["packages/*/src"]
 exclude = [
-    "src/m3cv",                                    # Legacy code, needs refactoring
+    "_legacy",                                     # Legacy code, reference only
     "packages/m3cv-dataprep/src/m3cv_prep/nonvolume_logic_reference",  # Reference only
     "_oldfiles",
 ]
@@ -53,4 +54,4 @@ ignore = [
 ]
 
 [tool.ruff.lint.isort]
-known-first-party = ["m3cv", "m3cv_prep", "m3cv_data"]
+known-first-party = ["m3cv", "m3cv_prep", "m3cv_data", "m3cv_models"]
