@@ -1,17 +1,18 @@
 [project]
 name = "m3cv-models"
 version = "0.1.0"
-description = "Neural network architectures for multimodal medical imaging"
+description = "Neural network architectures for medical imaging with multimodal fusion support"
 readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [
-    "keras>=3.0.0",
-    "tensorflow>=2.15.0",
+    "numpy>=2.2.6",
+    "torch>=2.0.0",
 ]
 
 [dependency-groups]
 dev = [
-    "pytest>=8.0.0",
+    "h5py>=3.15.1",
+    "pytest>=8.4.2",
 ]
 
 [build-system]
