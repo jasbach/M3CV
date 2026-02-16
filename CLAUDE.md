@@ -57,6 +57,10 @@ uv run ruff format .
   - `src/m3cv_prep/nonvolume_logic_reference/` - Reference code for tabular data (not active)
 
 - **`packages/m3cv-data/`** - Data loading and augmentation (in development)
+  - `src/m3cv_data/patient.py` - Patient dataclass and loading functions
+  - `src/m3cv_data/datasets/` - PyTorch Dataset implementations
+  - `src/m3cv_data/transforms/` - Patient preprocessing transforms
+  - `src/m3cv_data/inspect.py` - HDF5 file inspection utilities
   - `src/m3cv_data/_migrated_logic.py` - Preserved augmentation logic for future implementation
 
 - **`packages/m3cv-models/`** - Neural network architectures (planned)
@@ -97,6 +101,54 @@ Custom exceptions under `m3cv_prep.arrays.exceptions`:
 - `UnevenSpacingError` - Non-uniform slice spacing
 - `ROINotFoundError` - Structure not found in RTSTRUCT
 - `DoseTypeError` - Unexpected dose file type
+
+### m3cv-data Transforms
+
+The `transforms` subpackage provides preprocessing transforms that operate on Patient objects before channel stacking.
+
+**Transform Pipeline:**
+1. **Patient transforms** (`patient_transform`): Applied to Patient objects before stacking
+   - Have access to individual structure masks for anatomical reference calculation
+   - Example: `AnatomicalCrop`, custom preprocessing
+2. **Tensor transforms** (`transform`): Applied to stacked tensors
+   - Standard PyTorch-style transforms for normalization, augmentation
+   - Operate on final (C, Z, Y, X) tensor
+
+**Reference Strategies for Anatomical Cropping:**
+- `SingleStructureCOM(structure_name)` - Center on single structure's COM
+- `BilateralStructureMidpoint(left, right)` - Midpoint of bilateral structure COMs
+- `CombinedStructuresCOM(structure_names)` - COM of merged structures
+- `FallbackStrategy(strategies)` - Try strategies sequentially until one succeeds
+- `VolumeCenterStrategy()` - Geometric center (always succeeds)
+
+**AnatomicalCrop Transform:**
+- Crops Patient volumes around anatomical reference points
+- Standard void values: CT=-1000, dose=0, structures=0
+- Handles edge cases with padding using appropriate void values
+- Preserves patient metadata (patient_id, source_path, study_uid, etc.)
+- Integrates with `PatientDataset` via `patient_transform` parameter
+
+**Exception Handling:**
+- `ReferenceNotFoundError` - Raised when reference structures missing and fallback disabled
+  - Attributes: patient_id, missing_structures, available_structures, allow_fallback
+- Set `allow_fallback=True` to gracefully fall back to volume center
+- Set `warn_on_fallback=True` to emit warnings when fallback is used
+
+**Usage Pattern:**
+```python
+from m3cv_data import PatientDataset
+from m3cv_data.transforms import AnatomicalCrop, BilateralStructureMidpoint
+
+strategy = BilateralStructureMidpoint("Parotid_L", "Parotid_R")
+crop = AnatomicalCrop(crop_shape=(90, 128, 128), reference_strategy=strategy)
+
+dataset = PatientDataset(
+    paths="data/",
+    channels=["GTV"],
+    patient_transform=crop,  # Applied before stacking
+    transform=tensor_transform,  # Applied after stacking
+)
+```
 
 ## Code Style
 

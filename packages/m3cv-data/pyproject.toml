@@ -1,7 +1,7 @@
 [project]
 name = "m3cv-data"
-version = "0.1.0"
-description = "Data loading, augmentation, and batching for M3CV"
+version = "1.0.0"
+description = "Data loading, anatomical cropping, and PyTorch integration for medical imaging"
 readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [
@@ -32,3 +32,8 @@ select = ["E", "W", "F", "I", "B", "C4", "UP"]
 
 [tool.ruff.lint.isort]
 known-first-party = ["m3cv", "m3cv_prep", "m3cv_data"]
+
+[tool.pytest.ini_options]
+markers = [
+    "e2e: End-to-end integration tests (may require test data)",
+]

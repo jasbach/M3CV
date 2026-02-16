@@ -32,13 +32,13 @@ from m3cv_models import FusionConfig, FusionPoint, ResNet3DBuilder
 
 def load_hdf5_data(
     hdf5_path: Path,
-    max_samples: int = 10,
+    max_samples: int | None = None,
 ) -> tuple[torch.Tensor, torch.Tensor]:
-    """Load volumetric data from HDF5 file.
+    """Load volumetric data from HDF5 file(s).
 
     Args:
-        hdf5_path: Path to HDF5 file from m3cv-prep.
-        max_samples: Maximum number of samples to load.
+        hdf5_path: Path to HDF5 file or directory containing HDF5 files from m3cv-prep.
+        max_samples: Maximum number of samples to load (None = load all).
 
     Returns:
         Tuple of (volumes, labels) tensors.
@@ -48,52 +48,141 @@ def load_hdf5_data(
             "h5py required for HDF5 loading. Install with: pip install h5py"
         )
 
-    volumes = []
-    with h5py.File(hdf5_path, "r") as f:
-        # Iterate over patient groups
-        patient_keys = [k for k in f.keys() if k.startswith("patient_")]
-        if not patient_keys:
-            # Try direct array access
-            patient_keys = list(f.keys())
+    # Check if path is a directory or file
+    if hdf5_path.is_dir():
+        # Load all .h5 files from directory
+        h5_files = sorted(hdf5_path.glob("*.h5"))
+        if not h5_files:
+            raise ValueError(f"No .h5 files found in directory: {hdf5_path}")
+        print(f"Found {len(h5_files)} HDF5 file(s) in {hdf5_path}")
+    else:
+        # Single file
+        h5_files = [hdf5_path]
 
-        for key in patient_keys[:max_samples]:
-            group = f[key]
+    all_volumes = []
+    for h5_file in h5_files:
+        volumes = _load_single_hdf5(h5_file)
+        all_volumes.extend(volumes)
 
-            # Try to find CT and dose arrays
-            channels = []
-            if "ct" in group:
-                ct = np.array(group["ct"])
-                channels.append(ct)
-            if "dose" in group:
-                dose = np.array(group["dose"])
-                channels.append(dose)
+        # Check if we've hit the max sample limit
+        if max_samples is not None and len(all_volumes) >= max_samples:
+            all_volumes = all_volumes[:max_samples]
+            break
 
-            if not channels:
-                # Try loading as direct array
-                if isinstance(group, h5py.Dataset):
-                    arr = np.array(group)
-                    if arr.ndim == 3:
-                        channels.append(arr)
-                    elif arr.ndim == 4:
-                        for c in range(arr.shape[0]):
-                            channels.append(arr[c])
-
-            if channels:
-                # Stack channels and add to list
-                volume = np.stack(channels, axis=0)
-                volumes.append(volume)
-
-    if not volumes:
+    if not all_volumes:
         raise ValueError(f"No volumetric data found in {hdf5_path}")
 
+    # Check if all volumes have the same shape
+    shapes = [v.shape for v in all_volumes]
+    unique_shapes = list(set(shapes))
+
+    if len(unique_shapes) > 1:
+        print(f"[Warning] Volumes have different shapes: {unique_shapes}")
+        print("Finding common bounding box and cropping/padding...")
+
+        # Find minimum dimensions that can fit all volumes
+        target_shape = _get_common_shape(all_volumes)
+        print(f"Target shape: {target_shape}")
+
+        # Crop/pad all volumes to target shape
+        all_volumes = [_crop_or_pad_volume(v, target_shape) for v in all_volumes]
+
     # Stack all volumes and create synthetic labels
-    volumes_arr = np.stack(volumes, axis=0)
+    volumes_arr = np.stack(all_volumes, axis=0)
     volumes_tensor = torch.from_numpy(volumes_arr).float()
 
-    # Create synthetic binary labels
-    labels = torch.randint(0, 2, (len(volumes),))
+    # Create synthetic binary labels (randomly assigned for demo purposes)
+    labels = torch.randint(0, 2, (len(all_volumes),))
 
     return volumes_tensor, labels
+
+
+def _get_common_shape(volumes: list[np.ndarray]) -> tuple[int, ...]:
+    """Find a common shape for all volumes (minimum along each dimension).
+
+    Args:
+        volumes: List of volume arrays with shape [C, D, H, W].
+
+    Returns:
+        Common shape tuple (C, D, H, W).
+    """
+    # Use minimum dimensions to avoid excessive memory for demo
+    min_shape = volumes[0].shape
+    for v in volumes[1:]:
+        min_shape = tuple(min(a, b) for a, b in zip(min_shape, v.shape, strict=False))
+    return min_shape
+
+
+def _crop_or_pad_volume(
+    volume: np.ndarray, target_shape: tuple[int, ...]
+) -> np.ndarray:
+    """Crop or pad a volume to match target shape.
+
+    Args:
+        volume: Input volume with shape [C, D, H, W].
+        target_shape: Target shape (C, D, H, W).
+
+    Returns:
+        Volume cropped/padded to target shape.
+    """
+    # For simplicity, center crop if larger, zero-pad if smaller
+    result = np.zeros(target_shape, dtype=volume.dtype)
+
+    # Calculate crop/pad offsets for each dimension
+    slices_src = []
+    slices_dst = []
+
+    for src_size, tgt_size in zip(volume.shape, target_shape, strict=False):
+        if src_size >= tgt_size:
+            # Crop: take center portion
+            start = (src_size - tgt_size) // 2
+            slices_src.append(slice(start, start + tgt_size))
+            slices_dst.append(slice(None))
+        else:
+            # Pad: place in center
+            start = (tgt_size - src_size) // 2
+            slices_src.append(slice(None))
+            slices_dst.append(slice(start, start + src_size))
+
+    result[tuple(slices_dst)] = volume[tuple(slices_src)]
+    return result
+
+
+def _load_single_hdf5(hdf5_path: Path) -> list[np.ndarray]:
+    """Load volumes from a single HDF5 file.
+
+    Each HDF5 file from m3cv-prep contains one patient with ct/dose at root level.
+
+    Args:
+        hdf5_path: Path to HDF5 file.
+
+    Returns:
+        List of volume arrays (each with shape [C, D, H, W]).
+        Note: Returns a list with one element per file (one patient per file).
+    """
+    with h5py.File(hdf5_path, "r") as f:
+        # m3cv-prep saves ct and dose as direct datasets at root level
+        channels = []
+
+        if "ct" in f:
+            ct = np.array(f["ct"])
+            channels.append(ct)
+
+        if "dose" in f:
+            dose = np.array(f["dose"])
+            channels.append(dose)
+
+        if not channels:
+            raise ValueError(
+                f"No ct or dose data found in {hdf5_path}. "
+                f"Available keys: {list(f.keys())}"
+            )
+
+        # Stack channels: [C, D, H, W] where C is number of modalities
+        volume = np.stack(channels, axis=0)
+
+        # Return as list with single volume (one patient per file)
+        return [volume]
 
 
 def create_synthetic_data(
@@ -179,7 +268,7 @@ def main():
     parser.add_argument(
         "--data",
         type=Path,
-        help="Path to HDF5 file from m3cv-prep",
+        help="Path to HDF5 file or directory containing HDF5 files from m3cv-prep",
     )
     parser.add_argument(
         "--synthetic",
@@ -228,8 +317,8 @@ def main():
         )
         print(f"Created synthetic data: {volumes.shape}")
     else:
-        volumes, labels = load_hdf5_data(args.data, max_samples=10)
-        print(f"Loaded HDF5 data: {volumes.shape}")
+        volumes, labels = load_hdf5_data(args.data, max_samples=None)
+        print(f"Loaded {len(volumes)} patient(s): {volumes.shape}")
 
     num_channels = volumes.size(1)
 

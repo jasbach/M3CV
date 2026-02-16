@@ -1,7 +1,7 @@
 [project]
 name = "m3cv-models"
-version = "0.1.0"
-description = "Neural network architectures for medical imaging with multimodal fusion support"
+version = "1.0.0"
+description = "3D neural network architectures for medical imaging with multimodal fusion"
 readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [

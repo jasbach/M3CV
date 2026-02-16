@@ -451,7 +451,7 @@ dev = [
 
 [[package]]
 name = "m3cv-data"
-version = "0.1.0"
+version = "1.0.0"
 source = { editable = "packages/m3cv-data" }
 dependencies = [
     { name = "h5py" },
@@ -478,7 +478,7 @@ dev = [{ name = "pytest", specifier = ">=8.4.2" }]
 
 [[package]]
 name = "m3cv-dataprep"
-version = "0.1.0"
+version = "1.0.0"
 source = { editable = "packages/m3cv-dataprep" }
 dependencies = [
     { name = "h5py" },
@@ -511,7 +511,7 @@ dev = [{ name = "pytest", specifier = ">=8.4.2" }]
 
 [[package]]
 name = "m3cv-models"
-version = "0.1.0"
+version = "1.0.0"
 source = { editable = "packages/m3cv-models" }
 dependencies = [
     { name = "numpy" },
