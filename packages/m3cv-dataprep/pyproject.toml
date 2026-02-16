@@ -1,7 +1,7 @@
 [project]
 name = "m3cv-dataprep"
-version = "0.1.0"
-description = "Add your description here"
+version = "1.0.0"
+description = "DICOM data preparation for machine learning - converts radiotherapy data to HDF5"
 readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [

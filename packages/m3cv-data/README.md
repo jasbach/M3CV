@@ -139,9 +139,71 @@ dataset = PatientDataset(
 )
 ```
 
-### Transforms
+### Anatomical Cropping
 
-Apply transforms to volumes before returning:
+Standardize volume sizes by cropping around anatomical landmarks rather than volume centers. This improves spatial alignment across patients:
+
+```python
+from m3cv_data import PatientDataset
+from m3cv_data.transforms import AnatomicalCrop, BilateralStructureMidpoint
+
+# Define parotid-centered cropping strategy
+strategy = BilateralStructureMidpoint("Parotid_L", "Parotid_R")
+crop_transform = AnatomicalCrop(
+    crop_shape=(90, 128, 128),      # Target size (Z, Y, X)
+    reference_strategy=strategy,
+    allow_fallback=False,            # Fail if parotids missing
+)
+
+# Create dataset with anatomical cropping
+dataset = PatientDataset(
+    paths="data/processed/",
+    channels=["GTV", "Parotid_L", "Parotid_R"],
+    include_ct=True,
+    include_dose=True,
+    patient_transform=crop_transform,  # Applied before stacking
+)
+```
+
+**Available reference strategies:**
+
+- `SingleStructureCOM("GTV")` - Center on a single structure's center-of-mass
+- `BilateralStructureMidpoint("Parotid_L", "Parotid_R")` - Midpoint between bilateral structures
+- `CombinedStructuresCOM(["GTV", "CTV"])` - Center on merged structures
+- `VolumeCenterStrategy()` - Geometric center (always succeeds)
+- `FallbackStrategy([strategy1, strategy2])` - Try strategies sequentially
+
+**Fallback behavior:**
+
+```python
+# Gracefully fall back to volume center if structures missing
+crop_transform = AnatomicalCrop(
+    crop_shape=(90, 128, 128),
+    reference_strategy=BilateralStructureMidpoint("Parotid_L", "Parotid_R"),
+    allow_fallback=True,        # Enable fallback
+    warn_on_fallback=True,      # Emit warning when falling back
+)
+```
+
+**Error handling:**
+
+```python
+from m3cv_data.transforms import ReferenceNotFoundError
+
+try:
+    dataset = PatientDataset(
+        paths="data/processed/",
+        patient_transform=crop_transform,
+    )
+    volume, label = dataset[0]
+except ReferenceNotFoundError as e:
+    print(f"Missing structures: {e.missing_structures}")
+    print(f"Available: {e.available_structures}")
+```
+
+### Tensor Transforms
+
+Apply transforms to volumes after channel stacking:
 
 ```python
 def normalize(tensor):
@@ -151,7 +213,7 @@ def normalize(tensor):
 dataset = PatientDataset(
     paths="data/processed/",
     channels=["GTV"],
-    transform=normalize,
+    transform=normalize,  # Applied to tensor after patient_transform
 )
 ```
 
@@ -185,3 +247,23 @@ dataset = PatientDataset(
 - Tabular data integration
 
 We are intentionally deferring these features until the end-to-end training flow is verified working correctly.
+
+## Transform Pipeline
+
+Transforms are applied in two stages:
+
+1. **Patient transforms** (`patient_transform`): Operate on Patient objects before channel stacking
+   - Access to individual structure masks for anatomical reference calculation
+   - Example: `AnatomicalCrop`, custom preprocessing
+
+2. **Tensor transforms** (`transform`): Operate on stacked tensors after channel merging
+   - Standard PyTorch transforms (normalization, augmentation)
+   - Applied to final (C, Z, Y, X) tensor
+
+## Citation
+
+If you use this package in your research, please cite the published work:
+
+> Asbach JC, Singh AK, Iovoli AJ, Farrugia M, Le AH. Novel pre-spatial data fusion deep learning approach for multimodal volumetric outcome prediction models in radiotherapy. *Med Phys*. 2025; 52: 2675–2687. https://doi.org/10.1002/mp.17672
+
+See the [main README](../../README.md#citation) for full citation details.

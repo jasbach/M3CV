@@ -1,0 +1,9 @@
+# Exclude all HDF5 test data files
+*.h5
+
+# Exclude DICOM directories
+*/
+
+# Keep the README
+!README.md
+!.gitignore

@@ -451,7 +451,7 @@ dev = [
 
 [[package]]
 name = "m3cv-data"
-version = "0.1.0"
+version = "1.0.0"
 source = { editable = "packages/m3cv-data" }
 dependencies = [
     { name = "h5py" },
@@ -478,7 +478,7 @@ dev = [{ name = "pytest", specifier = ">=8.4.2" }]
 
 [[package]]
 name = "m3cv-dataprep"
-version = "0.1.0"
+version = "1.0.0"
 source = { editable = "packages/m3cv-dataprep" }
 dependencies = [
     { name = "h5py" },
@@ -511,26 +511,30 @@ dev = [{ name = "pytest", specifier = ">=8.4.2" }]
 
 [[package]]
 name = "m3cv-models"
-version = "0.1.0"
+version = "1.0.0"
 source = { editable = "packages/m3cv-models" }
 dependencies = [
-    { name = "keras" },
-    { name = "tensorflow" },
+    { name = "numpy" },
+    { name = "torch" },
 ]
 
 [package.dev-dependencies]
 dev = [
+    { name = "h5py" },
     { name = "pytest" },
 ]
 
 [package.metadata]
 requires-dist = [
-    { name = "keras", specifier = ">=3.0.0" },
-    { name = "tensorflow", specifier = ">=2.15.0" },
+    { name = "numpy", specifier = ">=2.2.6" },
+    { name = "torch", specifier = ">=2.0.0" },
 ]
 
 [package.metadata.requires-dev]
-dev = [{ name = "pytest", specifier = ">=8.0.0" }]
+dev = [
+    { name = "h5py", specifier = ">=3.15.1" },
+    { name = "pytest", specifier = ">=8.4.2" },
+]
 
 [[package]]
 name = "markdown"

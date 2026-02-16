@@ -3,6 +3,17 @@
 from m3cv_data.datasets import PatientDataset, patient_collate_fn
 from m3cv_data.inspect import H5FileInfo, inspect_directory, inspect_h5, summary_table
 from m3cv_data.patient import Patient, load_patient, load_patients
+from m3cv_data.transforms import (
+    AnatomicalCrop,
+    BilateralStructureMidpoint,
+    CombinedStructuresCOM,
+    FallbackStrategy,
+    ReferenceNotFoundError,
+    ReferenceStrategy,
+    SingleStructureCOM,
+    TransformError,
+    VolumeCenterStrategy,
+)
 
 __version__ = "0.1.0"
 
@@ -19,4 +30,14 @@ __all__ = [
     # PyTorch datasets
     "PatientDataset",
     "patient_collate_fn",
+    # Transforms
+    "AnatomicalCrop",
+    "BilateralStructureMidpoint",
+    "CombinedStructuresCOM",
+    "FallbackStrategy",
+    "ReferenceNotFoundError",
+    "ReferenceStrategy",
+    "SingleStructureCOM",
+    "TransformError",
+    "VolumeCenterStrategy",
 ]

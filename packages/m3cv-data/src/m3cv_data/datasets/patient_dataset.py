@@ -29,6 +29,10 @@ class PatientDataset(Dataset):
         include_dose: Whether to include dose as a channel.
         preload: If True, load all patient data into memory at initialization.
             Useful for small datasets that fit in memory.
+        patient_transform: Optional callable that takes a Patient object and
+            returns a transformed Patient object. Applied before channel stacking.
+            Used for operations like anatomical cropping that need access to
+            individual structure masks.
         transform: Optional callable that takes a tensor and returns a
             transformed tensor. Applied to the volume before returning.
         label_fn: Optional callable that takes a Patient and returns an integer
@@ -52,6 +56,7 @@ class PatientDataset(Dataset):
         include_ct: bool = True,
         include_dose: bool = False,
         preload: bool = False,
+        patient_transform: Callable[[Patient], Patient] | None = None,
         transform: Callable[[torch.Tensor], torch.Tensor] | None = None,
         label_fn: Callable[[Patient], int] | None = None,
     ) -> None:
@@ -60,6 +65,7 @@ class PatientDataset(Dataset):
         self._include_ct = include_ct
         self._include_dose = include_dose
         self._preload = preload
+        self._patient_transform = patient_transform
         self._transform = transform
         self._label_fn = label_fn
 
@@ -110,6 +116,10 @@ class PatientDataset(Dataset):
             patient = self._patients[idx]
         else:
             patient = load_patient(self._file_paths[idx])
+
+        # Apply patient transform if provided
+        if self._patient_transform is not None:
+            patient = self._patient_transform(patient)
 
         # Stack channels
         volume = patient.stack_channels(
@@ -207,6 +217,7 @@ class PatientDataset(Dataset):
                 include_ct=self._include_ct,
                 include_dose=self._include_dose,
                 preload=self._preload,
+                patient_transform=self._patient_transform,
                 transform=self._transform,
                 label_fn=self._label_fn,
             )
@@ -254,6 +265,7 @@ class PatientDataset(Dataset):
                 include_ct=self._include_ct,
                 include_dose=self._include_dose,
                 preload=self._preload,
+                patient_transform=self._patient_transform,
                 transform=self._transform,
                 label_fn=self._label_fn,
             )
