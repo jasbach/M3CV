@@ -170,3 +170,5 @@ _oldfiles/*
 # Test data (not committed due to data sharing restrictions)
 test_packed/
 packages/m3cv-data/src/tests/fixtures/e2e_test_patients/
+dicom/*
+**/*.h5

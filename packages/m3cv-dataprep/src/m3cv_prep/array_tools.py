@@ -61,21 +61,29 @@ def unpack_sparse_array(
 def construct_arrays(
     grouped_dcms: dict[str, list[Dataset]],
     structure_names: list[str] | None = None,
+    structure_aliases: dict[str, list[str]] | None = None,
 ) -> tuple[PatientCT, PatientDose | None, dict[str, PatientMask] | None]:
     """Construct patient arrays from grouped DICOM files.
 
     Args:
         grouped_dcms: Dictionary mapping modality to list of DICOM Datasets.
-        structure_names: List of ROI names to create masks for.
+        structure_names: List of ROI names to create masks for (exact-match).
+        structure_aliases: Map of canonical name -> list of alias ROI names to try.
+            First matching alias wins; result is stored under the canonical name.
+            Mutually exclusive with structure_names (caller's responsibility).
 
     Returns:
         Tuple of (ct_array, dose_array, structure_masks).
         dose_array is None if no RTDOSE files provided.
-        structure_masks is None if no RTSTRUCT or structure_names provided.
+        structure_masks is None if no RTSTRUCT or structure_names/structure_aliases
+        provided.
 
     Raises:
         ValueError: If multiple RTSTRUCT files found.
+        ROINotFoundError: If a canonical name has no matching alias in the RTSTRUCT.
     """
+    from m3cv_prep.arrays.exceptions import ROINotFoundError
+
     ct_array = PatientCT.from_dicom_files(grouped_dcms["CT"])
     dose_array = None
     structure_masks = None
@@ -94,5 +102,27 @@ def construct_arrays(
                 ssfile=grouped_dcms["RTSTRUCT"][0],
                 roi_name=name,
             )
+
+    if "RTSTRUCT" in grouped_dcms and structure_aliases is not None:
+        if len(grouped_dcms["RTSTRUCT"]) > 1:
+            raise ValueError("Multiple RTSTRUCT files found; please provide only one.")
+        structure_masks = {}
+        ssfile = grouped_dcms["RTSTRUCT"][0]
+        for canonical_name, aliases in structure_aliases.items():
+            mask = None
+            for alias in aliases:
+                try:
+                    mask = PatientMask.from_rtstruct(
+                        reference=ct_array,
+                        ssfile=ssfile,
+                        roi_name=alias,
+                        proper_name=canonical_name,
+                    )
+                    break
+                except ROINotFoundError:
+                    continue
+            if mask is None:
+                raise ROINotFoundError(canonical_name)
+            structure_masks[canonical_name] = mask
 
     return ct_array, dose_array, structure_masks

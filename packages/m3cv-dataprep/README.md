@@ -11,6 +11,7 @@ Converts DICOM radiotherapy data (CT, dose, structures) into HDF5 format optimiz
 - ✅ **CT Processing** - Load and stack CT slices with spatial metadata preservation
 - ✅ **Dose Processing** - Handle PLAN and BEAM dose files with automatic CT grid alignment
 - ✅ **Structure Masks** - Rasterize RTSTRUCT contours into binary masks with sparse encoding
+- ✅ **Structure Alias Maps** - Handle non-standardized ROI names across institutions with a JSON alias file
 - ✅ **Spatial Alignment** - Automatic resampling and alignment with slice compatibility validation
 - ✅ **HDF5 Output** - Compact storage with sparse mask encoding and preserved metadata
 - ✅ **CLI Tools** - Command-line interface for inspection and batch processing
@@ -53,8 +54,6 @@ uv run m3cv-prep inspect /path/to/dicom/patient_001/ --details
 
 ### Pack DICOM to HDF5
 
-Convert DICOM files into HDF5 format:
-
 ```bash
 # Single patient
 uv run m3cv-prep pack /path/to/dicom/patient_001/ \
@@ -67,18 +66,18 @@ uv run m3cv-prep pack /path/to/dicom_dataset/ \
     --recursive \
     --structures "Parotid_L,Parotid_R,GTV,Brainstem"
 
-# Without dose (CT and structures only)
-uv run m3cv-prep pack /path/to/dicom/patient_001/ \
-    --out-path ./output/patient_001.h5 \
-    --structures "Parotid_L,Parotid_R"
-    # Dose is included by default if RTDOSE files are present
+# With an alias file (handles non-standardized ROI names across institutions)
+uv run m3cv-prep pack /path/to/dicom_dataset/ \
+    --out-path ./output/ \
+    --recursive \
+    --alias-file structures.json
 ```
 
-### Command Line Options
+## Command Line Options
 
 #### `inspect` command
 
-```bash
+```
 uv run m3cv-prep inspect [PATH] [OPTIONS]
 
 Arguments:
@@ -91,7 +90,7 @@ Options:
 
 #### `pack` command
 
-```bash
+```
 uv run m3cv-prep pack [SOURCE] [OPTIONS]
 
 Arguments:
@@ -100,13 +99,14 @@ Arguments:
 Options:
   --out-path PATH        Output path (file or directory)
   --structures TEXT      Comma-separated list of structure names to include
+  --alias-file PATH      JSON file mapping canonical names to DICOM aliases
   --recursive            Process subdirectories as separate patients
-  --help                Show help message
+  --help                 Show help message
 ```
 
-## HDF5 Output Format
+Note: `--structures` and `--alias-file` are mutually exclusive.
 
-The packed HDF5 files have the following structure:
+## HDF5 Output Format
 
 ```
 patient_001.h5
@@ -188,10 +188,20 @@ dcm_files = load_dicom_files_from_directory("/path/to/patient/")
 # Group by modality
 grouped = group_dcms_by_modality(dcm_files)
 
-# Construct arrays
+# Construct arrays (exact-match names)
 ct_array, dose_array, structure_masks = construct_arrays(
     grouped,
     structure_names=["Parotid_L", "Parotid_R", "GTV"]
+)
+
+# Or use alias maps for non-standardized ROI names
+ct_array, dose_array, structure_masks = construct_arrays(
+    grouped,
+    structure_aliases={
+        "Parotid_L": ["Parotid_L", "parotid_lt", "Lt_Parotid"],
+        "Parotid_R": ["Parotid_R", "parotid_rt", "Rt_Parotid"],
+        "GTV":       ["GTV", "GTV_70", "gtv_primary"],
+    }
 )
 
 # Save to HDF5
@@ -233,7 +243,7 @@ Common errors and solutions:
 
 **`ROINotFoundError: ROI 'StructureName' not found`**
 - Requested structure doesn't exist in RTSTRUCT
-- Solution: Check available structures with `inspect --details`
+- Solution: Check available structures with `inspect --details`; consider using `--alias-file`
 
 **`SliceCompatibilityError`**
 - Dose/structure slices don't align with CT slices
@@ -245,19 +255,38 @@ Common errors and solutions:
 
 ## Advanced Usage
 
-### Structure Name Patterns
+### Structure Alias Maps
 
-Structure names often vary between institutions. Common patterns:
+ROI names in DICOM files are not standardized — the same anatomical structure may be called
+`"Parotid_L"`, `"parotid_lt"`, `"Lt_Parotid"`, or `"PAROTID_LEFT"` across institutions.
+The `--alias-file` option lets you define canonical names with lists of possible aliases so
+the same pack job works across a heterogeneous dataset.
+
+Create a JSON file mapping each canonical name to a list of aliases to try (first match wins):
+
+```json
+{
+  "Parotid_L": ["Parotid_L", "parotid_lt", "Lt_Parotid", "PAROTID_LEFT"],
+  "Parotid_R": ["Parotid_R", "parotid_rt", "Rt_Parotid", "PAROTID_RIGHT"],
+  "GTV":       ["GTV", "GTV_70", "gtv_primary"]
+}
+```
 
 ```bash
-# Different naming conventions
---structures "Parotid_L,Parotid_R"      # Underscore
---structures "Parotid L,Parotid R"      # Space
---structures "L_Parotid,R_Parotid"      # Prefix
-
-# Always check available names first
+# Always check available structure names first
 uv run m3cv-prep inspect /path/to/data/ --details
+
+# Pack with alias resolution — output HDF5 keys are always the canonical names
+uv run m3cv-prep pack /path/to/dicom_dataset/ \
+    --out-path ./output/ \
+    --recursive \
+    --alias-file structures.json
 ```
+
+The canonical names become the HDF5 group keys (`structures/Parotid_L`, etc.), so
+downstream code can use consistent names regardless of the source institution.
+If no alias matches a patient's RTSTRUCT, an error is raised for that patient
+(in recursive mode the patient is skipped and processing continues).
 
 ### Batch Processing Script
 
@@ -278,12 +307,6 @@ done
 ```bash
 # Run tests
 uv run pytest src/tests/ -v
-
-# Test coverage includes:
-# - Array construction and alignment (75 tests)
-# - DICOM utilities
-# - HDF5 I/O
-# - Sparse mask encoding
 ```
 
 ## Performance
@@ -341,6 +364,7 @@ See [m3cv-data documentation](../m3cv-data/README.md) for data loading details.
 
 Future enhancements:
 
+- [x] Structure alias maps for non-standardized ROI names (`--alias-file`)
 - [ ] Config file support for batch processing
 - [ ] Support for non-uniform slice spacing
 - [ ] Multi-RTSTRUCT handling (merge from multiple files)
