@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import os
 from typing import Annotated
 
@@ -14,6 +15,44 @@ from m3cv_prep.dicom_utils import (
     validate_patientid,
 )
 from m3cv_prep.file_handling import load_dicom_files_from_directory, save_array_to_h5
+
+
+def _load_alias_file(alias_file: str) -> dict[str, list[str]]:
+    """Load and validate a structure alias JSON file.
+
+    Args:
+        alias_file: Path to the JSON file.
+
+    Returns:
+        Validated alias map (canonical name -> list of alias strings).
+
+    Raises:
+        typer.BadParameter: If the file cannot be read, parsed, or has invalid schema.
+    """
+    try:
+        with open(alias_file) as f:
+            data = json.load(f)
+    except FileNotFoundError as e:
+        raise typer.BadParameter(f"Alias file not found: {alias_file}") from e
+    except json.JSONDecodeError as e:
+        raise typer.BadParameter(f"Invalid JSON in alias file: {e}") from e
+
+    if not isinstance(data, dict):
+        raise typer.BadParameter("Alias file must be a JSON object at the top level.")
+    for key, value in data.items():
+        if not isinstance(key, str):
+            raise typer.BadParameter(f"Alias file keys must be strings, got: {key!r}")
+        if not isinstance(value, list) or not value:
+            raise typer.BadParameter(
+                f"Alias file values must be non-empty lists of strings, "
+                f"got {value!r} for key {key!r}"
+            )
+        for alias in value:
+            if not isinstance(alias, str):
+                raise typer.BadParameter(
+                    f"All aliases must be strings, got {alias!r} in key {key!r}"
+                )
+    return data
 
 
 def pack(
@@ -37,12 +76,25 @@ def pack(
             help="Comma-separated list of structure names to extract",
         ),
     ] = None,
+    alias_file: Annotated[
+        str,
+        typer.Option(
+            "--alias-file",
+            "-a",
+            help="JSON file mapping canonical structure names to DICOM aliases",
+        ),
+    ] = None,
 ):
     """Pack DICOM files into HDF5 format.
 
     Converts CT, RTDOSE, and RTSTRUCT files from a directory into a single
     HDF5 file suitable for machine learning pipelines.
     """
+    if structures is not None and alias_file is not None:
+        raise typer.BadParameter(
+            "--structures and --alias-file are mutually exclusive. Use one or the other."
+        )
+
     if source is None:
         source = os.getcwd()
 
@@ -51,15 +103,16 @@ def pack(
         raise typer.Exit(code=1)
 
     if not recursive:
-        _pack_single_directory(source, out_path, structures)
+        _pack_single_directory(source, out_path, structures, alias_file)
     else:
-        _pack_recursive(source, out_path, structures)
+        _pack_recursive(source, out_path, structures, alias_file)
 
 
 def _pack_single_directory(
     source: str,
     out_path: str | None,
     structures: str | None,
+    alias_file: str | None,
 ) -> None:
     """Pack a single directory of DICOM files."""
     if out_path is None:
@@ -74,8 +127,9 @@ def _pack_single_directory(
     grouped = group_dcms_by_modality(dcm_files)
 
     structure_list = structures.split(",") if structures else None
+    aliases = _load_alias_file(alias_file) if alias_file else None
     ct_array, dose_array, structure_masks = construct_arrays(
-        grouped, structure_names=structure_list
+        grouped, structure_names=structure_list, structure_aliases=aliases
     )
 
     save_array_to_h5(out_path, ct_array, dose_array, structure_masks)
@@ -86,12 +140,14 @@ def _pack_recursive(
     source: str,
     out_path: str | None,
     structures: str | None,
+    alias_file: str | None,
 ) -> None:
     """Pack multiple directories of DICOM files recursively."""
     if out_path is None:
         out_path = source
     os.makedirs(out_path, exist_ok=True)
 
+    aliases = _load_alias_file(alias_file) if alias_file else None
     processed = 0
     for root, _dirs, _files in os.walk(source):
         dcm_files = load_dicom_files_from_directory(root)
@@ -105,7 +161,7 @@ def _pack_recursive(
 
             structure_list = structures.split(",") if structures else None
             ct_array, dose_array, structure_masks = construct_arrays(
-                grouped, structure_names=structure_list
+                grouped, structure_names=structure_list, structure_aliases=aliases
             )
 
             patient_id = ct_array.patient_id or os.path.basename(root)
