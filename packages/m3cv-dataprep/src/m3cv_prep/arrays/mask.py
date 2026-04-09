@@ -148,12 +148,17 @@ class PatientMask(PatientArray):
 
         for data in ssfile.ROIContourSequence:
             if data.ReferencedROINumber == ref_num:
-                if hasattr(data, "ContourSequence"):
-                    return data.ContourSequence
-                raise ROINotFoundError(
-                    roi_name,
-                    message=f"ROI '{roi_name}' has no ContourSequence",
-                )
+                if not hasattr(data, "ContourSequence"):
+                    raise ROINotFoundError(
+                        roi_name,
+                        message=f"ROI '{roi_name}' exists in structure set but has no ContourSequence",
+                    )
+                if len(data.ContourSequence) == 0:
+                    raise ROINotFoundError(
+                        roi_name,
+                        message=f"ROI '{roi_name}' exists in structure set but has no contours drawn",
+                    )
+                return data.ContourSequence
 
         raise ROINotFoundError(roi_name, available_rois)
 

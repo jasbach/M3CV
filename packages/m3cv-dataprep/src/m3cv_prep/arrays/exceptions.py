@@ -51,12 +51,18 @@ class SliceCompatibilityError(AlignmentError):
 class ROINotFoundError(ArrayError):
     """Raised when a requested ROI is not found in the structure set."""
 
-    def __init__(self, roi_name: str, available_rois: list[str] | None = None):
+    def __init__(
+        self,
+        roi_name: str,
+        available_rois: list[str] | None = None,
+        message: str | None = None,
+    ):
         self.roi_name = roi_name
         self.available_rois = available_rois
-        message = f"ROI '{roi_name}' not found in structure set"
-        if available_rois:
-            message += f". Available ROIs: {available_rois}"
+        if message is None:
+            message = f"ROI '{roi_name}' not found in structure set"
+            if available_rois:
+                message += f". Available ROIs: {available_rois}"
         super().__init__(message)
 
 

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import warnings
 from typing import TYPE_CHECKING
 
 import numpy as np
@@ -97,11 +98,16 @@ def construct_arrays(
             raise ValueError("Multiple RTSTRUCT files found; please provide only one.")
         structure_masks = {}
         for name in structure_names:
-            structure_masks[name] = PatientMask.from_rtstruct(
-                reference=ct_array,
-                ssfile=grouped_dcms["RTSTRUCT"][0],
-                roi_name=name,
-            )
+            try:
+                structure_masks[name] = PatientMask.from_rtstruct(
+                    reference=ct_array,
+                    ssfile=grouped_dcms["RTSTRUCT"][0],
+                    roi_name=name,
+                )
+            except ROINotFoundError as e:
+                warnings.warn(
+                    f"Skipping structure '{name}': {e}", UserWarning, stacklevel=2
+                )
 
     if "RTSTRUCT" in grouped_dcms and structure_aliases is not None:
         if len(grouped_dcms["RTSTRUCT"]) > 1:
@@ -122,7 +128,10 @@ def construct_arrays(
                 except ROINotFoundError:
                     continue
             if mask is None:
-                raise ROINotFoundError(canonical_name)
-            structure_masks[canonical_name] = mask
+                warnings.warn(
+                    f"Skipping structure '{canonical_name}': no matching alias found in structure set",
+                    UserWarning,
+                    stacklevel=2,
+                )
 
     return ct_array, dose_array, structure_masks
