@@ -118,7 +118,6 @@ class PatientDose(PatientArray):
             "Rows",
             "Columns",
             "DoseUnits",
-            "DoseGridScaling",
         ]:
             if not attr_shared(dcms, attr):
                 mismatches.append(attr)

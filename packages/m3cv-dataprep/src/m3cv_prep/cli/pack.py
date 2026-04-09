@@ -85,6 +85,17 @@ def pack(
             help="JSON file mapping canonical structure names to DICOM aliases",
         ),
     ] = None,
+    skip_reference_check: Annotated[
+        bool,
+        typer.Option(
+            "--skip-reference-check",
+            help=(
+                "Skip FrameOfReferenceUID validation. Use only when files are known to be "
+                "spatially compatible but have mismatched UIDs due to separate anonymization "
+                "processes. Spatial misalignment will not be detected."
+            ),
+        ),
+    ] = False,
 ):
     """Pack DICOM files into HDF5 format.
 
@@ -96,6 +107,14 @@ def pack(
             "--structures and --alias-file are mutually exclusive. Use one or the other."
         )
 
+    if skip_reference_check:
+        print(
+            "[bold yellow]WARNING: --skip-reference-check is active. "
+            "FrameOfReferenceUID validation is disabled. "
+            "Spatial misalignment between modalities will not be detected. "
+            "Use only if files are known to be spatially compatible.[/bold yellow]"
+        )
+
     if source is None:
         source = os.getcwd()
 
@@ -104,9 +123,11 @@ def pack(
         raise typer.Exit(code=1)
 
     if not recursive:
-        _pack_single_directory(source, out_path, structures, alias_file)
+        _pack_single_directory(
+            source, out_path, structures, alias_file, skip_reference_check
+        )
     else:
-        _pack_recursive(source, out_path, structures, alias_file)
+        _pack_recursive(source, out_path, structures, alias_file, skip_reference_check)
 
 
 def _pack_single_directory(
@@ -114,6 +135,7 @@ def _pack_single_directory(
     out_path: str | None,
     structures: str | None,
     alias_file: str | None,
+    skip_reference_check: bool = False,
 ) -> None:
     """Pack a single directory of DICOM files."""
     if out_path is None:
@@ -126,7 +148,8 @@ def _pack_single_directory(
 
     validate_patientid(dcm_files)
     grouped = group_dcms_by_modality(dcm_files)
-    validate_frame_of_reference(grouped)
+    if not skip_reference_check:
+        validate_frame_of_reference(grouped)
 
     structure_list = structures.split(",") if structures else None
     aliases = _load_alias_file(alias_file) if alias_file else None
@@ -143,6 +166,7 @@ def _pack_recursive(
     out_path: str | None,
     structures: str | None,
     alias_file: str | None,
+    skip_reference_check: bool = False,
 ) -> None:
     """Pack multiple directories of DICOM files recursively."""
     if out_path is None:
@@ -160,7 +184,8 @@ def _pack_recursive(
         try:
             validate_patientid(dcm_files)
             grouped = group_dcms_by_modality(dcm_files)
-            validate_frame_of_reference(grouped)
+            if not skip_reference_check:
+                validate_frame_of_reference(grouped)
 
             structure_list = structures.split(",") if structures else None
             ct_array, dose_array, structure_masks = construct_arrays(
