@@ -97,14 +97,21 @@ Arguments:
   SOURCE                 Path to DICOM directory
 
 Options:
-  --out-path PATH        Output path (file or directory)
-  --structures TEXT      Comma-separated list of structure names to include
-  --alias-file PATH      JSON file mapping canonical names to DICOM aliases
-  --recursive            Process subdirectories as separate patients
-  --help                 Show help message
+  --out-path PATH           Output path (file or directory)
+  --structures TEXT         Comma-separated list of structure names to include
+  --alias-file PATH         JSON file mapping canonical names to DICOM aliases
+  --recursive               Process subdirectories as separate patients
+  --skip-reference-check    Skip FrameOfReferenceUID validation (see note below)
+  --help                    Show help message
 ```
 
 Note: `--structures` and `--alias-file` are mutually exclusive.
+
+> **`--skip-reference-check`:** Use only when files are known to be spatially compatible
+> but have mismatched FrameOfReferenceUIDs — for example, when CT, dose, and structure
+> files were anonymized by separate processes that did not preserve UID associations.
+> Spatial misalignment between modalities will not be detected. A prominent warning is
+> printed whenever this flag is active.
 
 ## HDF5 Output Format
 
@@ -244,6 +251,10 @@ Common errors and solutions:
 **`ROINotFoundError: ROI 'StructureName' not found`**
 - Requested structure doesn't exist in RTSTRUCT
 - Solution: Check available structures with `inspect --details`; consider using `--alias-file`
+
+**`ValueError: RTDOSE FrameOfReferenceUID does not match CT`**
+- Dose file was anonymized separately from CT/RTSTRUCT, breaking UID associations
+- Solution: Use `--skip-reference-check` if you are confident the files are spatially compatible
 
 **`SliceCompatibilityError`**
 - Dose/structure slices don't align with CT slices
