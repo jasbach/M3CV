@@ -52,6 +52,47 @@ def validate_fields(dcms: list[Dataset], fields: list[str]) -> None:
         raise ValueError(" \n".join(errors))
 
 
+def validate_frame_of_reference(grouped_dcms: dict[str, list[Dataset]]) -> None:
+    """Validate that all modalities share a consistent FrameOfReferenceUID.
+
+    Checks that RTDOSE and RTSTRUCT files are spatially associated with the CT.
+    For RTSTRUCT, at least one ROI must reference the CT FrameOfReferenceUID —
+    a file where no ROIs match indicates a genuinely mismatched structure set.
+
+    Args:
+        grouped_dcms: Dictionary mapping modality to list of DICOM Datasets,
+            as returned by group_dcms_by_modality.
+
+    Raises:
+        ValueError: If CT is absent, or if RTDOSE/RTSTRUCT do not share the
+            CT FrameOfReferenceUID.
+    """
+    if "CT" not in grouped_dcms:
+        raise ValueError("No CT files found in grouped DICOM files.")
+
+    ct_for = grouped_dcms["CT"][0].FrameOfReferenceUID
+
+    if "RTDOSE" in grouped_dcms:
+        dose_for = grouped_dcms["RTDOSE"][0].FrameOfReferenceUID
+        if dose_for != ct_for:
+            raise ValueError(
+                f"RTDOSE FrameOfReferenceUID '{dose_for}' does not match "
+                f"CT FrameOfReferenceUID '{ct_for}'."
+            )
+
+    if "RTSTRUCT" in grouped_dcms:
+        ssfile = grouped_dcms["RTSTRUCT"][0]
+        roi_for_uids = {
+            roi_info.ReferencedFrameOfReferenceUID
+            for roi_info in ssfile.StructureSetROISequence
+        }
+        if ct_for not in roi_for_uids:
+            raise ValueError(
+                f"No ROIs in RTSTRUCT reference the CT FrameOfReferenceUID '{ct_for}'. "
+                f"RTSTRUCT references: {sorted(roi_for_uids)}"
+            )
+
+
 def group_dcms_by_modality(dcms: list[Dataset]) -> dict[str, list[Dataset]]:
     """Sort DICOM files by their Modality attribute.
 

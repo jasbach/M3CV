@@ -59,6 +59,96 @@ def unpack_sparse_array(
     return dense
 
 
+def _build_masks_by_name(
+    ssfile: Dataset,
+    ct_array: PatientCT,
+    roi_for_map: dict[str, str],
+    structure_names: list[str],
+) -> dict[str, PatientMask]:
+    """Build structure masks by exact ROI name match.
+
+    Args:
+        ssfile: RTSTRUCT DICOM dataset.
+        ct_array: CT array to use as reference geometry.
+        roi_for_map: Map of ROI name -> FrameOfReferenceUID from the structure set.
+        structure_names: ROI names to extract.
+
+    Returns:
+        Dict of ROI name -> PatientMask for each successfully extracted structure.
+    """
+    from m3cv_prep.arrays.exceptions import ROINotFoundError
+
+    masks: dict[str, PatientMask] = {}
+    ct_for = ct_array.FoR
+    for name in structure_names:
+        if roi_for_map.get(name) != ct_for:
+            warnings.warn(
+                f"Skipping structure '{name}': FrameOfReferenceUID does not match CT",
+                UserWarning,
+                stacklevel=3,
+            )
+            continue
+        try:
+            masks[name] = PatientMask.from_rtstruct(
+                reference=ct_array,
+                ssfile=ssfile,
+                roi_name=name,
+            )
+        except ROINotFoundError as e:
+            warnings.warn(
+                f"Skipping structure '{name}': {e}", UserWarning, stacklevel=3
+            )
+    return masks
+
+
+def _build_masks_by_aliases(
+    ssfile: Dataset,
+    ct_array: PatientCT,
+    roi_for_map: dict[str, str],
+    structure_aliases: dict[str, list[str]],
+) -> dict[str, PatientMask]:
+    """Build structure masks by trying alias ROI names for each canonical name.
+
+    Args:
+        ssfile: RTSTRUCT DICOM dataset.
+        ct_array: CT array to use as reference geometry.
+        roi_for_map: Map of ROI name -> FrameOfReferenceUID from the structure set.
+        structure_aliases: Map of canonical name -> list of alias ROI names to try.
+            First matching alias wins; result is stored under the canonical name.
+
+    Returns:
+        Dict of canonical name -> PatientMask for each successfully extracted structure.
+    """
+    from m3cv_prep.arrays.exceptions import ROINotFoundError
+
+    masks: dict[str, PatientMask] = {}
+    ct_for = ct_array.FoR
+    for canonical_name, aliases in structure_aliases.items():
+        mask = None
+        for alias in aliases:
+            if roi_for_map.get(alias) != ct_for:
+                continue
+            try:
+                mask = PatientMask.from_rtstruct(
+                    reference=ct_array,
+                    ssfile=ssfile,
+                    roi_name=alias,
+                    proper_name=canonical_name,
+                )
+                break
+            except ROINotFoundError:
+                continue
+        if mask is None:
+            warnings.warn(
+                f"Skipping structure '{canonical_name}': no matching alias found in structure set",
+                UserWarning,
+                stacklevel=3,
+            )
+        else:
+            masks[canonical_name] = mask
+    return masks
+
+
 def construct_arrays(
     grouped_dcms: dict[str, list[Dataset]],
     structure_names: list[str] | None = None,
@@ -80,10 +170,13 @@ def construct_arrays(
         provided.
 
     Raises:
-        ValueError: If multiple RTSTRUCT files found.
-        ROINotFoundError: If a canonical name has no matching alias in the RTSTRUCT.
+        ValueError: If multiple RTSTRUCT files found, or if both structure_names
+            and structure_aliases are provided.
     """
-    from m3cv_prep.arrays.exceptions import ROINotFoundError
+    if structure_names is not None and structure_aliases is not None:
+        raise ValueError(
+            "structure_names and structure_aliases are mutually exclusive; provide one or the other."
+        )
 
     ct_array = PatientCT.from_dicom_files(grouped_dcms["CT"])
     dose_array = None
@@ -93,45 +186,25 @@ def construct_arrays(
         dose_array = PatientDose.from_dicom(grouped_dcms["RTDOSE"])
         dose_array.align_with(ct_array)
 
-    if "RTSTRUCT" in grouped_dcms and structure_names is not None:
+    if "RTSTRUCT" in grouped_dcms and (
+        structure_names is not None or structure_aliases is not None
+    ):
         if len(grouped_dcms["RTSTRUCT"]) > 1:
             raise ValueError("Multiple RTSTRUCT files found; please provide only one.")
-        structure_masks = {}
-        for name in structure_names:
-            try:
-                structure_masks[name] = PatientMask.from_rtstruct(
-                    reference=ct_array,
-                    ssfile=grouped_dcms["RTSTRUCT"][0],
-                    roi_name=name,
-                )
-            except ROINotFoundError as e:
-                warnings.warn(
-                    f"Skipping structure '{name}': {e}", UserWarning, stacklevel=2
-                )
 
-    if "RTSTRUCT" in grouped_dcms and structure_aliases is not None:
-        if len(grouped_dcms["RTSTRUCT"]) > 1:
-            raise ValueError("Multiple RTSTRUCT files found; please provide only one.")
-        structure_masks = {}
         ssfile = grouped_dcms["RTSTRUCT"][0]
-        for canonical_name, aliases in structure_aliases.items():
-            mask = None
-            for alias in aliases:
-                try:
-                    mask = PatientMask.from_rtstruct(
-                        reference=ct_array,
-                        ssfile=ssfile,
-                        roi_name=alias,
-                        proper_name=canonical_name,
-                    )
-                    break
-                except ROINotFoundError:
-                    continue
-            if mask is None:
-                warnings.warn(
-                    f"Skipping structure '{canonical_name}': no matching alias found in structure set",
-                    UserWarning,
-                    stacklevel=2,
-                )
+        roi_for_map = {
+            roi_info.ROIName: roi_info.ReferencedFrameOfReferenceUID
+            for roi_info in ssfile.StructureSetROISequence
+        }
+
+        if structure_names is not None:
+            structure_masks = _build_masks_by_name(
+                ssfile, ct_array, roi_for_map, structure_names
+            )
+        else:
+            structure_masks = _build_masks_by_aliases(
+                ssfile, ct_array, roi_for_map, structure_aliases
+            )
 
     return ct_array, dose_array, structure_masks

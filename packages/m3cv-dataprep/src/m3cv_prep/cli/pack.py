@@ -12,6 +12,7 @@ from rich import print
 from m3cv_prep.array_tools import construct_arrays
 from m3cv_prep.dicom_utils import (
     group_dcms_by_modality,
+    validate_frame_of_reference,
     validate_patientid,
 )
 from m3cv_prep.file_handling import load_dicom_files_from_directory, save_array_to_h5
@@ -125,6 +126,7 @@ def _pack_single_directory(
 
     validate_patientid(dcm_files)
     grouped = group_dcms_by_modality(dcm_files)
+    validate_frame_of_reference(grouped)
 
     structure_list = structures.split(",") if structures else None
     aliases = _load_alias_file(alias_file) if alias_file else None
@@ -158,6 +160,7 @@ def _pack_recursive(
         try:
             validate_patientid(dcm_files)
             grouped = group_dcms_by_modality(dcm_files)
+            validate_frame_of_reference(grouped)
 
             structure_list = structures.split(",") if structures else None
             ct_array, dose_array, structure_masks = construct_arrays(
